@@ -1,11 +1,4 @@
-import Link from 'next/link'
-import { ClipboardList, PackagePlus, Users } from 'lucide-react'
-
-const navItems = [
-  { href: '/clientes', label: 'Clientes', icon: Users },
-  { href: '/produtos/novo', label: 'Novo Produto', icon: PackagePlus },
-  { href: '/publicacoes', label: 'Publicações', icon: ClipboardList },
-]
+import { NavLinks } from './NavLinks'
 
 export default function DashboardLayout({
   children,
@@ -23,22 +16,7 @@ export default function DashboardLayout({
           </div>
         </div>
 
-        <nav className="nav-list">
-          {navItems.map((item) => {
-            const Icon = item.icon
-
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className="nav-link"
-              >
-                <Icon />
-                {item.label}
-              </Link>
-            )
-          })}
-        </nav>
+        <NavLinks />
       </aside>
 
       <main className="content">{children}</main>

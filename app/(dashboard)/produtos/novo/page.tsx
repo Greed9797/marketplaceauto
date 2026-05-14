@@ -34,6 +34,7 @@ export default function NovoProdutoPage() {
   const [categoriaShopeeId, setCategoriaShopeeId] = useState('0')
   const [atributos, setAtributos] = useState<Record<string, unknown>>({})
   const [loadingClientes, setLoadingClientes] = useState(true)
+  const [uploading, setUploading] = useState(false)
   const [generating, setGenerating] = useState(false)
   const [submitting, setSubmitting] = useState('')
   const [error, setError] = useState('')
@@ -119,6 +120,29 @@ export default function NovoProdutoPage() {
     router.refresh()
   }
 
+  async function uploadFoto(file: File | undefined) {
+    if (!file) {
+      setFotoUrl('')
+      return
+    }
+
+    setError('')
+    setUploading(true)
+    const formData = new FormData()
+    formData.append('file', file)
+    const response = await fetch('/api/upload', { method: 'POST', body: formData })
+
+    if (!response.ok) {
+      setError('Nao foi possivel enviar a imagem.')
+      setUploading(false)
+      return
+    }
+
+    const data = (await response.json()) as { url: string }
+    setFotoUrl(data.url)
+    setUploading(false)
+  }
+
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     salvar(false, false)
@@ -173,8 +197,9 @@ export default function NovoProdutoPage() {
             <input
               type="file"
               accept="image/*"
-              onChange={(event) => setFotoUrl(event.target.files?.[0]?.name ?? '')}
+              onChange={(event) => uploadFoto(event.target.files?.[0])}
             />
+            <span className="counter">{uploading ? 'Enviando imagem...' : fotoUrl || 'Opcional'}</span>
           </label>
 
           <div className="form-grid-3">

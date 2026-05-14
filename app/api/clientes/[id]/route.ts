@@ -63,14 +63,3 @@ export async function DELETE(_req: Request, { params }: ClienteRouteParams) {
 
   return NextResponse.json({ success: true })
 }
-
-export async function POST(req: Request, context: ClienteRouteParams) {
-  const formData = await req.formData()
-
-  if (formData.get('_method') === 'DELETE') {
-    await DELETE(req, context)
-    return NextResponse.redirect(new URL('/clientes', req.url), { status: 303 })
-  }
-
-  return NextResponse.json({ error: 'Metodo nao suportado.' }, { status: 405 })
-}

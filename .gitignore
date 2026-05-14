@@ -37,6 +37,8 @@ yarn-error.log*
 # local sqlite database
 local.db
 local.db-*
+public/uploads/*
+!public/uploads/.gitkeep
 
 # vercel
 .vercel

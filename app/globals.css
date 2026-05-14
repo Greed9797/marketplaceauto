@@ -151,6 +151,11 @@ button:disabled {
   transform: translateX(2px);
 }
 
+.nav-link-active {
+  background: #ecfdf3;
+  color: var(--primary-strong);
+}
+
 .content {
   min-width: 0;
   padding: 34px;

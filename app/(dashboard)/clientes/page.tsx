@@ -1,9 +1,11 @@
 import { desc, gt } from 'drizzle-orm'
 import Link from 'next/link'
-import { Edit, Plus, Trash2 } from 'lucide-react'
+import { Edit, Link2, Plus } from 'lucide-react'
 import { db } from '@/lib/db'
 import { now } from '@/lib/db/helpers'
 import { clientes, tokensMl, tokensShopee } from '@/lib/db/schema'
+import { DeleteClienteButton } from './DeleteClienteButton'
+import { DisconnectTokenButton } from './DisconnectTokenButton'
 
 export default async function ClientesPage() {
   const timestamp = now()
@@ -87,7 +89,9 @@ export default async function ClientesPage() {
             <tbody>
               {clientesList.map((cliente) => (
                 <tr key={cliente.id}>
-                  <td className="cell-title">{cliente.nome}</td>
+                  <td className="cell-title">
+                    <Link href={`/clientes/${cliente.id}`}>{cliente.nome}</Link>
+                  </td>
                   <td>{cliente.nicho ?? '-'}</td>
                   <td>
                     <span className={`connection ${mlConnected.has(cliente.id) ? 'connection-on' : 'connection-off'}`}>
@@ -105,6 +109,22 @@ export default async function ClientesPage() {
                   </td>
                   <td>
                     <div className="table-actions">
+                      {mlConnected.has(cliente.id) ? (
+                        <DisconnectTokenButton clienteId={cliente.id} plataforma="ml" />
+                      ) : (
+                        <a href={`/api/auth/ml?cliente_id=${cliente.id}`} className="btn btn-ml">
+                          <Link2 />
+                          Conectar ML
+                        </a>
+                      )}
+                      {shopeeConnected.has(cliente.id) ? (
+                        <DisconnectTokenButton clienteId={cliente.id} plataforma="shopee" />
+                      ) : (
+                        <a href={`/api/auth/shopee?cliente_id=${cliente.id}`} className="btn btn-shopee">
+                          <Link2 />
+                          Conectar Shopee
+                        </a>
+                      )}
                       <Link
                         href={`/clientes/${cliente.id}/editar`}
                         className="btn btn-secondary"
@@ -112,16 +132,7 @@ export default async function ClientesPage() {
                         <Edit />
                         Editar
                       </Link>
-                      <form action={`/api/clientes/${cliente.id}`} method="post">
-                        <input type="hidden" name="_method" value="DELETE" />
-                        <button
-                          type="submit"
-                          className="btn btn-danger"
-                        >
-                          <Trash2 />
-                          Excluir
-                        </button>
-                      </form>
+                      <DeleteClienteButton id={cliente.id} />
                     </div>
                   </td>
                 </tr>

@@ -1,14 +1,14 @@
-import { and, desc, eq } from 'drizzle-orm'
+import { and, desc, eq, type SQL } from 'drizzle-orm'
 import Link from 'next/link'
 import { db } from '@/lib/db'
 import { clientes, produtos, publicacoes } from '@/lib/db/schema'
 
 type PublicacoesPageProps = {
-  searchParams: {
+  searchParams: Promise<{
     cliente_id?: string
     plataforma?: string
     status?: string
-  }
+  }>
 }
 
 function formatDate(timestamp: number) {
@@ -52,12 +52,13 @@ function statusBadge(status: string) {
 }
 
 export default async function PublicacoesPage({ searchParams }: PublicacoesPageProps) {
+  const filters = await searchParams
   const clientesList = await db.select().from(clientes).orderBy(desc(clientes.createdAt))
-  const conditions = [
-    searchParams.cliente_id ? eq(publicacoes.clienteId, searchParams.cliente_id) : undefined,
-    searchParams.plataforma ? eq(publicacoes.plataforma, searchParams.plataforma) : undefined,
-    searchParams.status ? eq(publicacoes.status, searchParams.status) : undefined,
-  ].filter(Boolean)
+  const conditions: SQL[] = [
+    filters.cliente_id ? eq(publicacoes.clienteId, filters.cliente_id) : null,
+    filters.plataforma ? eq(publicacoes.plataforma, filters.plataforma) : null,
+    filters.status ? eq(publicacoes.status, filters.status) : null,
+  ].filter((condition): condition is SQL => condition !== null)
 
   const rows = await db
     .select({
@@ -92,7 +93,7 @@ export default async function PublicacoesPage({ searchParams }: PublicacoesPageP
           Cliente
           <select
             name="cliente_id"
-            defaultValue={searchParams.cliente_id ?? ''}
+            defaultValue={filters.cliente_id ?? ''}
           >
             <option value="">Todos</option>
             {clientesList.map((cliente) => (
@@ -107,7 +108,7 @@ export default async function PublicacoesPage({ searchParams }: PublicacoesPageP
           Plataforma
           <select
             name="plataforma"
-            defaultValue={searchParams.plataforma ?? ''}
+            defaultValue={filters.plataforma ?? ''}
           >
             <option value="">Todos</option>
             <option value="ml">ML</option>
@@ -119,7 +120,7 @@ export default async function PublicacoesPage({ searchParams }: PublicacoesPageP
           Status
           <select
             name="status"
-            defaultValue={searchParams.status ?? ''}
+            defaultValue={filters.status ?? ''}
           >
             <option value="">Todos</option>
             <option value="sucesso">sucesso</option>

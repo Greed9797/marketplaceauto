@@ -5,9 +5,9 @@ import { db } from '@/lib/db'
 import { clientes } from '@/lib/db/schema'
 
 type EditarClientePageProps = {
-  params: {
+  params: Promise<{
     id: string
-  }
+  }>
 }
 
 function parseJsonArray(value: string | null) {
@@ -39,7 +39,8 @@ function parseDadosFiscais(value: string | null) {
 }
 
 export default async function EditarClientePage({ params }: EditarClientePageProps) {
-  const [cliente] = await db.select().from(clientes).where(eq(clientes.id, params.id)).limit(1)
+  const { id } = await params
+  const [cliente] = await db.select().from(clientes).where(eq(clientes.id, id)).limit(1)
 
   if (!cliente) {
     notFound()

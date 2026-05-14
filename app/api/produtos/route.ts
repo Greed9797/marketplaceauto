@@ -4,6 +4,8 @@ import { z } from 'zod'
 import { db } from '@/lib/db'
 import { newId, now } from '@/lib/db/helpers'
 import { clientes, produtos, publicacoes } from '@/lib/db/schema'
+import { publicarMlProduto } from '@/lib/ml/publish'
+import { publicarShopeeProduto } from '@/lib/shopee/publish'
 
 export const runtime = 'nodejs'
 
@@ -110,5 +112,19 @@ export async function POST(req: Request) {
     }
   })
 
-  return NextResponse.json({ success: true, id })
+  const publishErrors: string[] = []
+
+  if (parsed.data.publicar_ml) {
+    await publicarMlProduto(id).catch((error) => {
+      publishErrors.push(error instanceof Error ? error.message : 'Falha ao publicar no ML.')
+    })
+  }
+
+  if (parsed.data.publicar_shopee) {
+    await publicarShopeeProduto(id).catch((error) => {
+      publishErrors.push(error instanceof Error ? error.message : 'Falha ao publicar na Shopee.')
+    })
+  }
+
+  return NextResponse.json({ success: true, id, publishErrors })
 }

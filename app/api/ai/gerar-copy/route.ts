@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { db } from '@/lib/db'
 import { clientes } from '@/lib/db/schema'
+import { gerarCopy } from '@/lib/ai/gemini'
 
 export const runtime = 'nodejs'
 
@@ -23,6 +24,8 @@ export async function POST(req: Request) {
     .select({
       nicho: clientes.nicho,
       estiloDescricao: clientes.estiloDescricao,
+      exemplosTitulos: clientes.exemplosTitulos,
+      exemplosDescricoes: clientes.exemplosDescricoes,
     })
     .from(clientes)
     .where(eq(clientes.id, parsed.data.cliente_id))
@@ -32,12 +35,20 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Cliente nao encontrado.' }, { status: 404 })
   }
 
-  return NextResponse.json({
-    titulo_ml: `${parsed.data.nome_produto} - Produto Qualidade`.slice(0, 60),
-    titulo_shopee: `${parsed.data.nome_produto} - Melhor Preco | Entrega Rapida`.slice(0, 120),
-    descricao: `Produto: ${parsed.data.nome_produto}\n\nDescricao gerada pela IA sera implementada na Fase 3.\n\nNicho: ${cliente.nicho ?? 'Nao informado'}\nEstilo: ${cliente.estiloDescricao ?? 'Nao informado'}`,
-    categoria_ml_sugerida: 'Outros',
-    categoria_shopee_id: 0,
-    atributos: {},
-  })
+  try {
+    const copy = await gerarCopy({
+      nomeProduto: parsed.data.nome_produto,
+      nicho: cliente.nicho ?? '',
+      estiloDescricao: cliente.estiloDescricao ?? '',
+      exemplosTitulos: cliente.exemplosTitulos ? JSON.parse(cliente.exemplosTitulos) : [],
+      exemplosDescricoes: cliente.exemplosDescricoes ? JSON.parse(cliente.exemplosDescricoes) : [],
+    })
+
+    return NextResponse.json(copy)
+  } catch (error) {
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Falha ao gerar copy com Gemini.' },
+      { status: 500 },
+    )
+  }
 }
