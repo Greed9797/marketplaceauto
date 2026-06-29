@@ -123,8 +123,8 @@ export function productionEnvErrors(env = process.env) {
   }
 
   for (const key of ["DATABASE_URL", "DIRECT_URL"]) {
-    if (hasText(env[key]) && !env[key].includes("schema=w3ads")) {
-      errors.push(`${key} must include schema=w3ads in production.`);
+    if (hasText(env[key]) && !env[key].includes("schema=w3marketplace")) {
+      errors.push(`${key} must include schema=w3marketplace in production.`);
     }
   }
 
