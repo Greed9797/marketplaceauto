@@ -1,0 +1,1 @@
+ALTER TABLE "DailyMetric" ADD COLUMN IF NOT EXISTS "addToCart" BIGINT;

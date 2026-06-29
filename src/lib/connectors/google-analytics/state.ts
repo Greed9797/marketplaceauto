@@ -1,0 +1,1 @@
+export const GOOGLE_ANALYTICS_OAUTH_STATE_COOKIE = "adstart_google_analytics_oauth_state";

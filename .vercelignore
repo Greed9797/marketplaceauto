@@ -1,0 +1,31 @@
+.env
+.env.*
+!.env.example
+
+# Build output + deps — Vercel builds remotely, never upload these. A local
+# `.next` (~500MB after a local build) bloats the tar and times out the upload.
+.next
+node_modules
+
+# Local dev/agent artifacts — never deploy (transient sqlite files break the tar)
+.code-review-graph
+graphify-out
+.claude
+.smart-hook
+.serena
+.playwright-mcp
+.git.corrupt.bak
+.agents
+
+# Untracked local scratch — keep out of production builds.
+# NOTE: anchor screenshot PNGs to the repo ROOT (leading slash). A bare
+# `*.png` matches recursively and would strip public/connector-logos/*.png,
+# 404-ing every connector logo in production.
+/*.png
+wbuy-after.md
+src/app/preview
+
+# macOS "Keep Both" duplicates (e.g. "page 2.tsx") — never real route/source.
+# They get type-checked by `next build` and a stale copy fails the whole build.
+* 2.ts
+* 2.tsx

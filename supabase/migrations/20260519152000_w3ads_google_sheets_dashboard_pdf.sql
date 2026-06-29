@@ -1,0 +1,1 @@
+ALTER TYPE w3ads."ConnectorProvider" ADD VALUE IF NOT EXISTS 'GOOGLE_SHEETS';

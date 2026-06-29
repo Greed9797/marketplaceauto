@@ -1,0 +1,186 @@
+@import "tailwindcss";
+
+:root {
+  --w3-orange: #ff6b00;
+  --w3-orange-hover: #ff7f24;
+  --w3-orange-soft: rgba(255, 107, 0, 0.12);
+  --w3-red: var(--w3-orange);
+  --w3-red-hover: var(--w3-orange-hover);
+  --w3-red-bg: var(--w3-orange-soft);
+  --w3-gold: #ffb000;
+  --w3-gold-bg: rgba(255, 176, 0, 0.12);
+
+  --bg-canvas: #f7f4ef;
+  --bg-surface: #ffffff;
+  --bg-elevated: #eee8df;
+  --border-subtle: rgba(18, 18, 18, 0.10);
+  --border-strong: rgba(18, 18, 18, 0.22);
+
+  --text-primary: #0a0a0a;
+  --text-secondary: #45413b;
+  --text-tertiary: #7d756c;
+  --text-disabled: #b6afa7;
+  /* Metric value: ~10% lighter than the H1/label black so big numbers don't
+     fight the page title or the (now black) card label. */
+  --metric-value: #26221d;
+  --text-on-red: #FFFFFF;
+  --text-on-gold: #0a0a0a;
+
+  --success: #188a4a;
+  --success-bg: rgba(24, 138, 74, 0.12);
+  --danger: #d12d20;
+  --danger-bg: rgba(209, 45, 32, 0.12);
+  --warning: #c75600;
+  --warning-bg: rgba(199, 86, 0, 0.12);
+  --info: #2459c8;
+  --info-bg: rgba(36, 89, 200, 0.12);
+
+  --shadow-sm: 0 1px 2px rgba(10, 10, 10, 0.05);
+  --shadow-md: 0 8px 22px rgba(10, 10, 10, 0.08), 0 1px 2px rgba(10, 10, 10, 0.05);
+  --shadow-lg: 0 18px 48px rgba(10, 10, 10, 0.14), 0 4px 12px rgba(10, 10, 10, 0.08);
+  --theme-toggle-bg: rgba(10, 10, 10, 0.04);
+  --grid-line: rgba(10, 10, 10, 0.06);
+  --hero-glow: rgba(255, 107, 0, 0.18);
+
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+  --radius-pill: 999px;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+  --space-20: 80px;
+}
+
+[data-theme="dark"] {
+  --bg-canvas: #030303;
+  --bg-surface: #111111;
+  --bg-elevated: #1b1b1b;
+  --border-subtle: rgba(255, 255, 255, 0.09);
+  --border-strong: rgba(255, 255, 255, 0.18);
+
+  --text-primary: #f7f7f4;
+  --text-secondary: #d0ccc4;
+  --text-tertiary: #96918a;
+  --text-disabled: #64605b;
+  --metric-value: #e8e4dc;
+
+  --success: #39c16d;
+  --success-bg: rgba(57, 193, 109, 0.13);
+  --danger: #ff5a4d;
+  --danger-bg: rgba(255, 90, 77, 0.13);
+  --warning: #ff9a2c;
+  --warning-bg: rgba(255, 154, 44, 0.13);
+  --info: #7aa2ff;
+  --info-bg: rgba(122, 162, 255, 0.13);
+
+  --shadow-sm: 0 1px 0 rgba(255, 255, 255, 0.03);
+  --shadow-md: 0 16px 36px rgba(0, 0, 0, 0.35), 0 1px 0 rgba(255, 255, 255, 0.04);
+  --shadow-lg: 0 24px 70px rgba(0, 0, 0, 0.46), 0 1px 0 rgba(255, 255, 255, 0.05);
+  --theme-toggle-bg: rgba(255, 255, 255, 0.04);
+  --grid-line: rgba(255, 255, 255, 0.055);
+  --hero-glow: rgba(255, 107, 0, 0.34);
+}
+
+[data-theme="dark"] ::selection {
+  background: rgba(255, 107, 0, 0.36);
+  color: #ffffff;
+}
+
+::selection {
+  background: rgba(255, 107, 0, 0.24);
+  color: var(--text-primary);
+}
+
+@theme inline {
+  --color-w3-red: var(--w3-red);
+  --color-w3-red-hover: var(--w3-red-hover);
+  --color-w3-gold: var(--w3-gold);
+  --color-canvas: var(--bg-canvas);
+  --color-surface: var(--bg-surface);
+  --color-elevated: var(--bg-elevated);
+  --font-display: var(--font-display);
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+  --radius-sm: var(--radius-sm);
+  --radius-md: var(--radius-md);
+  --radius-lg: var(--radius-lg);
+  --shadow-sm: var(--shadow-sm);
+  --shadow-md: var(--shadow-md);
+  --shadow-lg: var(--shadow-lg);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  background: var(--bg-canvas);
+  color: var(--text-primary);
+}
+
+body {
+  min-height: 100vh;
+  margin: 0;
+  background: var(--bg-canvas);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  text-rendering: optimizeLegibility;
+}
+
+.w3-app-shell {
+  background:
+    radial-gradient(85rem 18rem at 50% -7rem, var(--hero-glow), transparent 68%),
+    radial-gradient(52rem 13rem at 50% 0, rgba(255, 107, 0, 0.12), transparent 68%),
+    linear-gradient(var(--grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px),
+    var(--bg-canvas);
+  background-size: auto, auto, 120px 120px, 120px 120px, auto;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+.text-caption {
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  line-height: 1.3;
+  text-transform: uppercase;
+}
+
+.text-kpi {
+  font-family: var(--font-display);
+  font-size: clamp(2.25rem, 6vw, 3rem);
+  font-weight: 400;
+  letter-spacing: -0.03em;
+  line-height: 1;
+}
+
+/* Metric card label: the name (e.g. "ROAS Global") is the black anchor —
+   bigger and darker than the old uppercase caption, value sits one notch
+   lighter. Single source of truth for every metric card in the system. */
+.metric-label {
+  font-size: 1.125rem;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  line-height: 1.25;
+  text-transform: none;
+  color: var(--text-primary);
+}
+
+.scrollbar-stable {
+  scrollbar-gutter: stable;
+}

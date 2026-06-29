@@ -1,0 +1,9 @@
+SET search_path = w3ads, public, extensions;
+
+ALTER TYPE "PlatformRole" ADD VALUE IF NOT EXISTS 'ADMIN_MASTER';
+ALTER TYPE "PlatformRole" ADD VALUE IF NOT EXISTS 'ADMIN_LIMITED';
+ALTER TYPE "PlatformRole" ADD VALUE IF NOT EXISTS 'TRAFFIC_MANAGER';
+
+ALTER TYPE "MemberRole" ADD VALUE IF NOT EXISTS 'CLIENT';
+
+NOTIFY pgrst, 'reload schema';

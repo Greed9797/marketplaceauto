@@ -1,0 +1,22 @@
+.DS_Store
+.code-review-graph/
+.env
+.env*.local
+.next/
+coverage/
+node_modules/
+playwright-report/
+test-results/
+supabase/.temp/
+*.tsbuildinfo
+.vercel
+
+# macOS/cloud sync conflict copies (enforced by CI "Reject sync-conflict shadow files")
+* 2.*
+* 3.*
+* 2
+* 3
+
+# dev artifacts
+.playwright-mcp/
+/w3marketplace-connectors-authed.png

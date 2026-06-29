@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - master
+      - feat/connectors-expanded
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    env:
+      AUTH_SECRET: ci-local-secret-ci-local-secret-ci
+      NEXTAUTH_SECRET: ci-local-secret-ci-local-secret-ci
+      AUTH_DISABLED: "true"
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adstart_w3
+      DIRECT_URL: postgresql://postgres:postgres@localhost:5432/adstart_w3
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reject sync-conflict shadow files
+        run: |
+          shadow=$(find . \( -name '* 2.*' -o -name '* 3.*' -o -name '* 2' -o -name '* 3' \) \
+            -not -path './node_modules/*' -not -path './.git/*' -not -path './.next/*' || true)
+          if [ -n "$shadow" ]; then
+            echo "::error::Sync-conflict shadow files committed (rename/remove the ' 2.' / ' 3.' copies):"
+            echo "$shadow"
+            exit 1
+          fi
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm test
+      - run: npm run build
+      - run: npm run e2e
+      - run: npm audit --audit-level=high

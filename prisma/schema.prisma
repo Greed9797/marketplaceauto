@@ -1,0 +1,516 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model User {
+  id            String       @id @default(cuid())
+  email         String       @unique
+  name          String?
+  passwordHash  String?
+  image         String?
+  platformRole  PlatformRole @default(USER)
+  emailVerified DateTime?
+  deletedAt     DateTime?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  accounts            Account[]
+  memberships         Membership[]
+  sessions            Session[]
+  auditLogs           AuditLog[]
+  passwordResetTokens PasswordResetToken[]
+  sentInvites         WorkspaceInvite[]    @relation("WorkspaceInviteInviter")
+  betaFeedbacks       BetaFeedback[]
+  accountReviewSessions AccountReviewSession[]
+}
+
+enum PlatformRole {
+  USER
+  W3_ADMIN
+  ADMIN_MASTER
+  ADMIN_LIMITED
+  TRAFFIC_MANAGER
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+model Session {
+  id           String    @id @default(cuid())
+  userId       String
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expires      DateTime
+  sessionToken String    @unique
+  createdAt    DateTime  @default(now())
+  /// Sliding-window activity marker. Updated lazily on each request once per
+  /// `SESSION_TOUCH_INTERVAL_MS`. Sessions idle for more than
+  /// `SESSION_IDLE_INVALIDATE_MS` are rejected even when `expires` is in the
+  /// future.
+  lastSeenAt   DateTime?
+}
+
+model VerificationToken {
+  identifier String
+  token      String
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model Workspace {
+  id        String        @id @default(cuid())
+  name      String
+  slug      String        @unique
+  plan      WorkspacePlan @default(FREE)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  memberships              Membership[]
+  connectors               ConnectorAccount[]
+  connectorProviderConfigs ConnectorProviderConfig[]
+  dashboards               Dashboard[]
+  dailyMetrics             DailyMetric[]
+  ecommerceOrders          EcommerceOrder[]
+  ecommerceOrderItems      EcommerceOrderItem[]
+  productInventory         ProductInventory[]
+  auditLogs                AuditLog[]
+  invites                  WorkspaceInvite[]
+  betaFeedbacks            BetaFeedback[]
+  syncJobs                 SyncJob[]
+  syncState                WorkspaceSyncState?
+  accountReviewSessions    AccountReviewSession[]
+}
+
+model WorkspaceSyncState {
+  id                String    @id @default(cuid())
+  workspaceId       String    @unique
+  workspace         Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  lastSyncedAt      DateTime?
+  lastSyncStartedAt DateTime?
+  lastSyncStatus    String?
+  lastSyncError     String?
+  syncCount         Int       @default(0)
+  triggeredBy       String?
+  updatedAt         DateTime  @updatedAt
+
+  @@index([lastSyncedAt])
+}
+
+enum WorkspacePlan {
+  FREE
+  PRO
+  AGENCY
+}
+
+model Membership {
+  id          String     @id @default(cuid())
+  userId      String
+  user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspaceId String
+  workspace   Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  role        MemberRole
+  createdAt   DateTime   @default(now())
+
+  @@unique([userId, workspaceId])
+  @@index([workspaceId])
+}
+
+model WorkspaceInvite {
+  id          String     @id @default(cuid())
+  workspaceId String
+  workspace   Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  email       String
+  role        MemberRole
+  // Legacy plaintext token — kept nullable for backwards-compatibility with
+  // invites issued before tokenHash existed. New invites set only `tokenHash`.
+  token       String?    @unique
+  tokenHash   String?    @unique
+  invitedById String
+  invitedBy   User       @relation("WorkspaceInviteInviter", fields: [invitedById], references: [id], onDelete: Cascade)
+  acceptedAt  DateTime?
+  expiresAt   DateTime
+  createdAt   DateTime   @default(now())
+
+  @@index([workspaceId])
+  @@index([email])
+}
+
+enum MemberRole {
+  OWNER
+  ADMIN
+  VIEWER
+  CLIENT
+}
+
+model ConnectorAccount {
+  id                        String               @id @default(cuid())
+  workspaceId               String
+  workspace                 Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  provider                  ConnectorProvider
+  externalAccountId         String
+  accountName               String
+  status                    ConnectorStatus      @default(ACTIVE)
+  accessTokenCiphertext     String
+  refreshTokenCiphertext    String?
+  tokenIv                   String
+  tokenAuthTag              String
+  tokenKeyVersion           String               @default("v1")
+  credentialSecretId        String?
+  refreshCredentialSecretId String?
+  tokenExpiresAt            DateTime?
+  metadata                  Json?
+  lastSyncedAt              DateTime?
+  lastSyncError             String?
+  historicalSyncedAt        DateTime?
+  historicalBackfillUntil   DateTime?
+  createdAt                 DateTime             @default(now())
+  updatedAt                 DateTime             @updatedAt
+  dailyMetrics              DailyMetric[]
+  ecommerceOrders           EcommerceOrder[]
+  ecommerceOrderItems       EcommerceOrderItem[]
+  productInventory          ProductInventory[]
+  syncJobs                  SyncJob[]
+
+  @@unique([workspaceId, provider, externalAccountId])
+  @@index([workspaceId, provider])
+}
+
+model ConnectorProviderConfig {
+  id                  String                        @id @default(cuid())
+  workspaceId         String
+  workspace           Workspace                     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  provider            ConnectorProvider
+  status              ConnectorProviderConfigStatus @default(ACTIVE)
+  redirectUri         String?
+  scopes              String?
+  apiVersion          String?
+  baseUrl             String?
+  ordersPath          String?
+  displayName         String?
+  publicCredentials   Json?
+  secretRefs          Json?
+  lastValidatedAt     DateTime?
+  lastValidationError String?
+  createdAt           DateTime                      @default(now())
+  updatedAt           DateTime                      @updatedAt
+
+  @@unique([workspaceId, provider])
+  @@index([workspaceId, status])
+}
+
+enum ConnectorProviderConfigStatus {
+  ACTIVE
+  INACTIVE
+  ERROR
+}
+
+model ConnectorSelectionSession {
+  id                   String            @id @default(cuid())
+  workspaceId          String
+  userId               String
+  provider             ConnectorProvider
+  status               String            @default("PENDING")
+  accounts             Json
+  credentialCiphertext String
+  credentialIv         String
+  credentialAuthTag    String
+  credentialKeyVersion String            @default("v1")
+  credentialSecretId   String?
+  expiresAt            DateTime
+  consumedAt           DateTime?
+  createdAt            DateTime          @default(now())
+
+  @@index([workspaceId, userId, provider])
+  @@index([expiresAt])
+}
+
+enum ConnectorProvider {
+  META_ADS
+  GOOGLE_ADS
+  SHOPIFY
+  NUVEMSHOP
+  ISET
+  TRAY
+  WBUY
+  MAGAZORD
+  GOOGLE_SHEETS
+  GA4
+  SEARCH_CONSOLE
+  LOJA_INTEGRADA
+  MERCADO_LIVRE
+  SHOPEE
+  SHOPEE_ADS
+  MERCADO_LIVRE_ADS
+}
+
+enum ConnectorStatus {
+  ACTIVE
+  TOKEN_EXPIRED
+  REVOKED
+  ERROR
+}
+
+model DailyMetric {
+  id                 String            @id @default(cuid())
+  workspaceId        String
+  workspace          Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  connectorAccountId String
+  connectorAccount   ConnectorAccount  @relation(fields: [connectorAccountId], references: [id], onDelete: Cascade)
+  date               DateTime          @db.Date
+  source             ConnectorProvider
+  campaignId         String?
+  campaignName       String?
+  campaignStatus     String?
+  campaignObjective  String?
+  adsetId            String?
+  adsetName          String?
+  adId               String?
+  spend              Decimal?          @db.Decimal(14, 2)
+  impressions        BigInt?
+  clicks             BigInt?
+  addToCart          BigInt?
+  conversions        Decimal?          @db.Decimal(14, 2)
+  conversionsValue   Decimal?          @db.Decimal(14, 2)
+  leads              BigInt?
+  scheduledEvents    BigInt?
+  sessions           BigInt?
+  orders             BigInt?
+  revenue            Decimal?          @db.Decimal(14, 2)
+  dedupeHash         String            @unique
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+
+  @@index([workspaceId, date])
+  @@index([workspaceId, source, date])
+  @@index([workspaceId, campaignId, date])
+}
+
+model EcommerceOrder {
+  id                 String               @id @default(cuid())
+  workspaceId        String
+  workspace          Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  connectorAccountId String
+  connectorAccount   ConnectorAccount     @relation(fields: [connectorAccountId], references: [id], onDelete: Cascade)
+  externalOrderId    String
+  platform           ConnectorProvider
+  orderNumber        String?
+  customerEmail      String?
+  orderTotal         Decimal              @db.Decimal(14, 2)
+  orderCurrency      String               @default("BRL")
+  itemsCount         Int
+  status             String
+  shippingState      String?
+  utmSource          String?
+  utmMedium          String?
+  utmCampaign        String?
+  placedAt           DateTime
+  createdAt          DateTime             @default(now())
+  items              EcommerceOrderItem[]
+
+  @@unique([connectorAccountId, externalOrderId])
+  @@index([workspaceId, placedAt])
+  @@index([workspaceId, platform, placedAt])
+}
+
+model EcommerceOrderItem {
+  id                 String           @id @default(cuid())
+  workspaceId        String
+  workspace          Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  connectorAccountId String
+  connectorAccount   ConnectorAccount @relation(fields: [connectorAccountId], references: [id], onDelete: Cascade)
+  ecommerceOrderId   String
+  ecommerceOrder     EcommerceOrder   @relation(fields: [ecommerceOrderId], references: [id], onDelete: Cascade)
+  externalOrderId    String
+  productName        String
+  sku                String?
+  quantity           Int
+  total              Decimal?         @db.Decimal(14, 2)
+  placedAt           DateTime
+  createdAt          DateTime         @default(now())
+
+  @@index([workspaceId, placedAt])
+  @@index([connectorAccountId, externalOrderId])
+  @@index([ecommerceOrderId])
+}
+
+/// Current available stock per product per store connector. Unlike
+/// EcommerceOrderItem.quantity (units SOLD), this holds the live on-hand
+/// quantity pulled from the store catalog API, refreshed on each sync. The
+/// dashboard joins it into the products table by SKU (preferred) then by
+/// productName, and uses categoryName to fill the Categorias widget.
+model ProductInventory {
+  id                 String           @id @default(cuid())
+  workspaceId        String
+  workspace          Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  connectorAccountId String
+  connectorAccount   ConnectorAccount @relation(fields: [connectorAccountId], references: [id], onDelete: Cascade)
+  externalProductId  String
+  sku                String?
+  productName        String
+  categoryName       String?
+  // null = stock not tracked by the store (sells unlimited / always available),
+  // rendered as "Disponível". A real integer (incl. 0) = tracked on-hand count.
+  quantity           Int?
+  syncedAt           DateTime         @default(now())
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+
+  @@unique([connectorAccountId, externalProductId])
+  @@index([workspaceId, productName])
+  @@index([workspaceId, sku])
+}
+
+model Dashboard {
+  id          String    @id @default(cuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  ownerId     String
+  name        String
+  isDefault   Boolean   @default(false)
+  layout      Json
+  widgets     Json
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([workspaceId])
+}
+
+model AuditLog {
+  id           String     @id @default(cuid())
+  workspaceId  String?
+  workspace    Workspace? @relation(fields: [workspaceId], references: [id])
+  userId       String?
+  user         User?      @relation(fields: [userId], references: [id])
+  action       String
+  resourceType String?
+  resourceId   String?
+  metadata     Json?
+  ip           String?
+  userAgent    String?
+  createdAt    DateTime   @default(now())
+
+  @@index([workspaceId, createdAt])
+  @@index([userId, createdAt])
+}
+
+/// Account-handover review timer ("passagem de conta"). An internal W3 manager
+/// starts the timer when they begin reviewing a brand and stops it when done.
+/// startedAt is the server source of truth: closing the site does not stop the
+/// count — on reopen the client rebuilds the elapsed time from startedAt. While
+/// endedAt is NULL the session is running; a partial unique index (see
+/// migration) enforces at most ONE running session per user at a time.
+model AccountReviewSession {
+  id              String    @id @default(cuid())
+  workspaceId     String
+  workspace       Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  userId          String
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  startedAt       DateTime  @default(now())
+  endedAt         DateTime?
+  durationSeconds Int?
+  note            String?
+  createdAt       DateTime  @default(now())
+
+  @@index([workspaceId, startedAt])
+  @@index([userId, startedAt])
+}
+
+model BetaFeedback {
+  id          String             @id @default(cuid())
+  workspaceId String?
+  workspace   Workspace?         @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
+  userId      String?
+  user        User?              @relation(fields: [userId], references: [id], onDelete: SetNull)
+  type        BetaFeedbackType   @default(SUGGESTION)
+  message     String             @db.Text
+  pagePath    String?
+  status      BetaFeedbackStatus @default(OPEN)
+  metadata    Json?
+  createdAt   DateTime           @default(now())
+
+  @@index([workspaceId, createdAt])
+  @@index([userId, createdAt])
+  @@index([status, createdAt])
+}
+
+enum BetaFeedbackType {
+  BUG
+  SUGGESTION
+  QUESTION
+}
+
+enum BetaFeedbackStatus {
+  OPEN
+  REVIEWED
+  CLOSED
+}
+
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+}
+
+model SyncJob {
+  id                 String            @id @default(cuid())
+  connectorAccountId String
+  connectorAccount   ConnectorAccount  @relation(fields: [connectorAccountId], references: [id], onDelete: Cascade)
+  workspaceId        String
+  workspace          Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  provider           ConnectorProvider
+  syncType           SyncType          @default(BACKFILL)
+  cursor             String?
+  status             SyncStatus
+  startedAt          DateTime          @default(now())
+  finishedAt         DateTime?
+  rowsInserted       Int               @default(0)
+  rowsUpdated        Int               @default(0)
+  errorMessage       String?
+  metadata           Json?
+
+  @@index([connectorAccountId, startedAt])
+  @@index([workspaceId, provider, status, startedAt])
+}
+
+enum SyncStatus {
+  PENDING
+  RUNNING
+  SUCCESS
+  FAILED
+  PARTIAL
+}
+
+enum SyncType {
+  BACKFILL
+  INCREMENTAL
+  TOKEN_REFRESH
+  MANUAL
+}
