@@ -8,11 +8,10 @@ export async function sendTransactionalEmail(input: SendEmailInput) {
   const apiKey = process.env.RESEND_API_KEY;
   const from = process.env.RESEND_FROM_EMAIL ?? "Adstart W3 <no-reply@w3educacao.com.br>";
 
+  // E-mail transacional é OPCIONAL nesta versão interna (single-tenant, ≤30
+  // usuários geridos pelo admin). Sem RESEND_API_KEY o envio simplesmente é
+  // pulado — o token de reset/convite ainda é criado no banco para uso manual.
   if (!apiKey) {
-    if (process.env.NODE_ENV === "production") {
-      throw new Error("RESEND_API_KEY is required in production.");
-    }
-
     return { skipped: true };
   }
 

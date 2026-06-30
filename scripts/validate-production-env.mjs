@@ -40,14 +40,9 @@ const requiredProductionEnvGroups = [
     keys: ["GOOGLE_OAUTH_CLIENT_SECRET"],
     message: "GOOGLE_OAUTH_CLIENT_SECRET is required in production.",
   },
-  {
-    keys: ["RESEND_API_KEY"],
-    message: "RESEND_API_KEY is required in production.",
-  },
-  {
-    keys: ["RESEND_FROM_EMAIL"],
-    message: "RESEND_FROM_EMAIL is required in production.",
-  },
+  // Resend (e-mail transacional) é OPCIONAL nesta versão interna — reset de
+  // senha e convites são geridos manualmente pelo admin. sendTransactionalEmail
+  // faz no-op sem RESEND_API_KEY.
   {
     keys: ["UPSTASH_REDIS_REST_URL"],
     message: "UPSTASH_REDIS_REST_URL is required in production.",
