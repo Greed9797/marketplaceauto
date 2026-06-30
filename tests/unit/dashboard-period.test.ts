@@ -55,10 +55,9 @@ describe("dashboard period", () => {
     expect(period.comparison.source).toBe("manual");
   });
 
-  it("parses traffic and commerce provider filters", () => {
-    // Marketplace-first: the visible traffic sources are the marketplace ad
-    // providers (Shopee Ads / Mercado Livre Ads); Meta/Google Ads + GA4 are
-    // hidden, so they are filtered out of the allowed selection.
+  it("parses commerce filters to Shopee/Mercado Livre and drops all ad traffic", () => {
+    // Marketplace-first: ALL paid-traffic/ad sources are hidden (trafficProviders
+    // empty); only Shopee + Mercado Livre count for commerce/sales aggregation.
     const filters = getDashboardFilters(
       {
         period: "month",
@@ -68,32 +67,27 @@ describe("dashboard period", () => {
       new Date("2026-05-16T12:00:00.000Z"),
     );
 
-    expect(filters.trafficProviders).toEqual([
-      ConnectorProvider.SHOPEE_ADS,
-      ConnectorProvider.MERCADO_LIVRE_ADS,
-    ]);
+    expect(filters.trafficProviders).toEqual([]);
     expect(filters.commerceProviders).toEqual([
       ConnectorProvider.MERCADO_LIVRE,
       ConnectorProvider.SHOPEE,
     ]);
   });
 
-  it("hides paid-traffic providers from the default in marketplace-first mode", () => {
+  it("excludes non-marketplace commerce providers in marketplace-first mode", () => {
     const filters = getDashboardFilters(
-      { period: "month", traffic: "META_ADS,GOOGLE_ADS" },
+      { period: "month", commerce: "SHOPIFY,NUVEMSHOP,MERCADO_LIVRE" },
       new Date("2026-05-16T12:00:00.000Z"),
     );
 
-    // Explicitly requesting hidden providers yields the marketplace default,
-    // never Meta/Google/GA4.
-    expect(filters.trafficProviders).not.toContain(ConnectorProvider.META_ADS);
-    expect(filters.trafficProviders).not.toContain(
-      ConnectorProvider.GOOGLE_ADS,
+    // Shopify/Nuvemshop are filtered out — only Shopee/Mercado Livre are allowed.
+    expect(filters.commerceProviders).not.toContain(ConnectorProvider.SHOPIFY);
+    expect(filters.commerceProviders).not.toContain(
+      ConnectorProvider.NUVEMSHOP,
     );
-    expect(filters.trafficProviders).toEqual([
-      ConnectorProvider.SHOPEE_ADS,
-      ConnectorProvider.MERCADO_LIVRE_ADS,
-    ]);
+    expect(filters.commerceProviders).toEqual([ConnectorProvider.MERCADO_LIVRE]);
+    // No paid-traffic/ad sources surface in the dashboard.
+    expect(filters.trafficProviders).toEqual([]);
   });
 
   it("always reports comparison disabled (feature removed)", () => {

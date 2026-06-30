@@ -1,8 +1,8 @@
 import { ConnectorProvider } from "@prisma/client";
 
 import {
-  HIDDEN_TRAFFIC_PROVIDERS,
   MARKETPLACE_FIRST,
+  MARKETPLACE_PROVIDERS,
 } from "@/lib/connectors/marketplace-first";
 
 export type DashboardPeriodPreset =
@@ -49,19 +49,14 @@ export const dashboardTrafficProviders = [
 ] as const;
 
 /**
- * Traffic providers actually surfaced for dashboard aggregation. In
- * marketplace-first mode the paid-traffic providers (Meta/Google Ads, GA4,
- * Search Console) are excluded from the default; the underlying
+ * Traffic/ad providers surfaced for dashboard aggregation. In marketplace-first
+ * mode ALL paid-traffic/ad sources are hidden — the dashboard shows only
+ * marketplace sales data (orders/revenue). The underlying
  * `dashboardTrafficProviders` tuple (and its label Record) stay intact, so the
  * behavior is reversible via the MARKETPLACE_FIRST flag.
  */
 export const visibleTrafficProviders: ConnectorProvider[] = MARKETPLACE_FIRST
-  ? dashboardTrafficProviders.filter(
-      (provider) =>
-        !(HIDDEN_TRAFFIC_PROVIDERS as readonly ConnectorProvider[]).includes(
-          provider,
-        ),
-    )
+  ? []
   : [...dashboardTrafficProviders];
 
 export const dashboardCommerceProviders = [
@@ -76,6 +71,16 @@ export const dashboardCommerceProviders = [
   ConnectorProvider.GOOGLE_SHEETS,
   ConnectorProvider.LOJA_INTEGRADA,
 ] as const;
+
+/**
+ * Commerce providers surfaced for dashboard aggregation. In marketplace-first
+ * mode only Shopee + Mercado Livre count — the other commerce platforms are
+ * excluded so revenue/orders reflect those two marketplaces only. Reversible
+ * via the MARKETPLACE_FIRST flag.
+ */
+export const visibleCommerceProviders: ConnectorProvider[] = MARKETPLACE_FIRST
+  ? [...MARKETPLACE_PROVIDERS]
+  : [...dashboardCommerceProviders];
 
 export const dashboardTrafficProviderLabels: Record<
   (typeof dashboardTrafficProviders)[number],
@@ -341,7 +346,7 @@ export function getDashboardFilters(
     trafficProviders: parseProviders(params.traffic, visibleTrafficProviders),
     commerceProviders: parseProviders(
       params.commerce,
-      dashboardCommerceProviders,
+      visibleCommerceProviders,
     ),
     comparisonEnabled: false,
   };

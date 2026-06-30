@@ -140,7 +140,11 @@ export default async function DashboardPage({
         </Card>
       ) : null}
 
-      <section className="grid items-start gap-4 md:grid-cols-2 xl:grid-cols-[1.35fr_1fr_1fr_0.72fr]">
+      {/* KPIs. Em marketplace-first, só métricas de VENDA (Faturamento, Qtd.
+          de vendas, Ticket médio). As métricas de anúncio/tráfego pago (Valor
+          investido, Custo de mídia, Custo por sessão, Taxa de conversão) só
+          aparecem com MARKETPLACE_FIRST=false. */}
+      <section className="grid items-start gap-4 sm:grid-cols-2 xl:grid-cols-3">
         <OperationalKpiCard
           accent="var(--w3-red)"
           icon={<ReceiptText aria-hidden className="size-4" />}
@@ -154,32 +158,38 @@ export default async function DashboardPage({
           }}
           value={formatCurrencyBR(snapshot.kpis.revenue.value)}
         />
-        <OperationalKpiCard
-          accent="var(--w3-gold)"
-          icon={<TrendingUp aria-hidden className="size-4" />}
-          kpi={snapshot.kpis.spend}
-          label="Valor investido"
-          previousValue={formatCurrencyBR(snapshot.kpis.spend.previousValue)}
-          showComparison={showComparison}
-          chart={{
-            data: chartSeries("spend", "previousSpend"),
-            format: "currency",
-          }}
-          value={formatCurrencyBR(snapshot.kpis.spend.value)}
-        />
-        <OperationalKpiCard
-          accent="var(--danger)"
-          icon={<Percent aria-hidden className="size-4" />}
-          kpi={snapshot.kpis.mediaRate}
-          label="Custo de mídia"
-          previousValue={formatPercentBR(snapshot.kpis.mediaRate.previousValue)}
-          showComparison={showComparison}
-          chart={{
-            data: chartSeries("mediaRate", "previousMediaRate"),
-            format: "percent",
-          }}
-          value={formatPercentBR(snapshot.kpis.mediaRate.value)}
-        />
+        {!MARKETPLACE_FIRST ? (
+          <OperationalKpiCard
+            accent="var(--w3-gold)"
+            icon={<TrendingUp aria-hidden className="size-4" />}
+            kpi={snapshot.kpis.spend}
+            label="Valor investido"
+            previousValue={formatCurrencyBR(snapshot.kpis.spend.previousValue)}
+            showComparison={showComparison}
+            chart={{
+              data: chartSeries("spend", "previousSpend"),
+              format: "currency",
+            }}
+            value={formatCurrencyBR(snapshot.kpis.spend.value)}
+          />
+        ) : null}
+        {!MARKETPLACE_FIRST ? (
+          <OperationalKpiCard
+            accent="var(--danger)"
+            icon={<Percent aria-hidden className="size-4" />}
+            kpi={snapshot.kpis.mediaRate}
+            label="Custo de mídia"
+            previousValue={formatPercentBR(
+              snapshot.kpis.mediaRate.previousValue,
+            )}
+            showComparison={showComparison}
+            chart={{
+              data: chartSeries("mediaRate", "previousMediaRate"),
+              format: "percent",
+            }}
+            value={formatPercentBR(snapshot.kpis.mediaRate.value)}
+          />
+        ) : null}
         <OperationalKpiCard
           accent="var(--w3-red)"
           compact
@@ -190,33 +200,34 @@ export default async function DashboardPage({
           showComparison={showComparison}
           value={formatIntegerBR(snapshot.kpis.orders.value)}
         />
-      </section>
-
-      <section className="grid gap-4 md:grid-cols-3">
-        <OperationalKpiCard
-          accent="var(--info)"
-          compact
-          icon={<MousePointerClick aria-hidden className="size-4" />}
-          kpi={snapshot.kpis.costPerSession}
-          label="Custo por sessão"
-          previousValue={formatCurrencyBR(
-            snapshot.kpis.costPerSession.previousValue,
-          )}
-          showComparison={showComparison}
-          value={formatCurrencyBR(snapshot.kpis.costPerSession.value)}
-        />
-        <OperationalKpiCard
-          accent="var(--success)"
-          compact
-          icon={<MousePointerClick aria-hidden className="size-4" />}
-          kpi={snapshot.kpis.conversionRate}
-          label="Taxa de conversão"
-          previousValue={formatPercentBR(
-            snapshot.kpis.conversionRate.previousValue,
-          )}
-          showComparison={showComparison}
-          value={formatPercentBR(snapshot.kpis.conversionRate.value)}
-        />
+        {!MARKETPLACE_FIRST ? (
+          <OperationalKpiCard
+            accent="var(--info)"
+            compact
+            icon={<MousePointerClick aria-hidden className="size-4" />}
+            kpi={snapshot.kpis.costPerSession}
+            label="Custo por sessão"
+            previousValue={formatCurrencyBR(
+              snapshot.kpis.costPerSession.previousValue,
+            )}
+            showComparison={showComparison}
+            value={formatCurrencyBR(snapshot.kpis.costPerSession.value)}
+          />
+        ) : null}
+        {!MARKETPLACE_FIRST ? (
+          <OperationalKpiCard
+            accent="var(--success)"
+            compact
+            icon={<MousePointerClick aria-hidden className="size-4" />}
+            kpi={snapshot.kpis.conversionRate}
+            label="Taxa de conversão"
+            previousValue={formatPercentBR(
+              snapshot.kpis.conversionRate.previousValue,
+            )}
+            showComparison={showComparison}
+            value={formatPercentBR(snapshot.kpis.conversionRate.value)}
+          />
+        ) : null}
         <OperationalKpiCard
           accent="var(--w3-gold)"
           compact
@@ -283,28 +294,34 @@ export default async function DashboardPage({
         </Card>
       </section>
 
-      <section className="grid gap-4">
-        {campaignTables.map((table) => (
-          <Card key={table.provider}>
-            <CardHeader>
-              <div>
-                <CardTitle>{table.title}</CardTitle>
-                <p className="mt-1 text-sm text-[var(--text-secondary)]">
-                  {table.description}
-                </p>
-              </div>
-              <TrendingUp aria-hidden className="size-4 text-[var(--w3-red)]" />
-            </CardHeader>
-            <CardContent>
-              <CampaignsTable
-                campaigns={snapshot.topCampaigns.filter(
-                  (campaign) => campaign.source === table.provider,
-                )}
-              />
-            </CardContent>
-          </Card>
-        ))}
-      </section>
+      {/* Campanhas de anúncio: tráfego pago — oculto em marketplace-first. */}
+      {!MARKETPLACE_FIRST ? (
+        <section className="grid gap-4">
+          {campaignTables.map((table) => (
+            <Card key={table.provider}>
+              <CardHeader>
+                <div>
+                  <CardTitle>{table.title}</CardTitle>
+                  <p className="mt-1 text-sm text-[var(--text-secondary)]">
+                    {table.description}
+                  </p>
+                </div>
+                <TrendingUp
+                  aria-hidden
+                  className="size-4 text-[var(--w3-red)]"
+                />
+              </CardHeader>
+              <CardContent>
+                <CampaignsTable
+                  campaigns={snapshot.topCampaigns.filter(
+                    (campaign) => campaign.source === table.provider,
+                  )}
+                />
+              </CardContent>
+            </Card>
+          ))}
+        </section>
+      ) : null}
     </div>
   );
 }

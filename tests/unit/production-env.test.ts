@@ -15,8 +15,8 @@ describe("production env validation", () => {
         AUTH_SECRET: "secret",
         NEXTAUTH_URL: "https://w3ads.vercel.app",
         AUTH_TRUST_HOST: "true",
-        DATABASE_URL: "postgresql://db?schema=w3ads",
-        DIRECT_URL: "postgresql://db?schema=w3ads",
+        DATABASE_URL: "postgresql://db?schema=w3marketplace",
+        DIRECT_URL: "postgresql://db?schema=w3marketplace",
         SUPABASE_URL: "https://project.supabase.co",
         SUPABASE_ANON_KEY: "anon",
         SUPABASE_SERVICE_ROLE_KEY: "service",
@@ -54,8 +54,6 @@ describe("production env validation", () => {
       "SUPABASE_SERVICE_ROLE_KEY is required in production.",
       "GOOGLE_OAUTH_CLIENT_ID is required in production.",
       "GOOGLE_OAUTH_CLIENT_SECRET is required in production.",
-      "RESEND_API_KEY is required in production.",
-      "RESEND_FROM_EMAIL is required in production.",
       "UPSTASH_REDIS_REST_URL is required in production.",
       "UPSTASH_REDIS_REST_TOKEN is required in production.",
       "INNGEST_EVENT_KEY is required in production.",
@@ -95,8 +93,8 @@ describe("production env validation", () => {
     ).toEqual([
       "AUTH_TRUST_HOST must be true in production.",
       "NEXTAUTH_URL must use https in production.",
-      "DATABASE_URL must include schema=w3ads in production.",
-      "DIRECT_URL must include schema=w3ads in production.",
+      "DATABASE_URL must include schema=w3marketplace in production.",
+      "DIRECT_URL must include schema=w3marketplace in production.",
       "DATABASE_URL must use the Supabase transaction pooler (pgbouncer / port 6543) in serverless production.",
     ]);
   });
@@ -131,9 +129,9 @@ describe("production env validation", () => {
       productionEnvErrors({
         ...base,
         DATABASE_URL:
-          "postgresql://u:p@db.pooler.supabase.com:5432/postgres?schema=w3ads&pgbouncer=true",
+          "postgresql://u:p@db.pooler.supabase.com:5432/postgres?schema=w3marketplace&pgbouncer=true",
         DIRECT_URL:
-          "postgresql://u:p@db.pooler.supabase.com:6543/postgres?schema=w3ads",
+          "postgresql://u:p@db.pooler.supabase.com:6543/postgres?schema=w3marketplace",
       }),
     ).toEqual([
       "DIRECT_URL must be the direct (non-pooled, port 5432) connection, not the pgbouncer pooler.",
@@ -144,9 +142,9 @@ describe("production env validation", () => {
       productionEnvErrors({
         ...base,
         DATABASE_URL:
-          "postgresql://u:p@db.pooler.supabase.com:6543/postgres?schema=w3ads&pgbouncer=true",
+          "postgresql://u:p@db.pooler.supabase.com:6543/postgres?schema=w3marketplace&pgbouncer=true",
         DIRECT_URL:
-          "postgresql://u:p@db.host.supabase.com:5432/postgres?schema=w3ads",
+          "postgresql://u:p@db.host.supabase.com:5432/postgres?schema=w3marketplace",
       }),
     ).toEqual([]);
   });
