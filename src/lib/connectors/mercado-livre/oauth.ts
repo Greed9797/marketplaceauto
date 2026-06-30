@@ -21,6 +21,9 @@ export function buildMercadoLivreOAuthUrl(input: {
   url.searchParams.set("client_id", input.config.clientId);
   url.searchParams.set("redirect_uri", input.config.redirectUri);
   url.searchParams.set("state", input.state);
+  // offline_access garante o refresh_token (sem ele o token expira em ~6h e o
+  // sync diário para); read basta para ler pedidos (não escrevemos no ML).
+  url.searchParams.set("scope", "offline_access read");
 
   return url;
 }
