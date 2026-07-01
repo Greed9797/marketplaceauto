@@ -106,7 +106,10 @@ export default async function PublicacoesPage({
         <Card>
           <CardContent>
             <div className="flex flex-col items-center gap-3 py-10 text-center">
-              <Send aria-hidden className="size-7 text-[var(--text-tertiary)]" />
+              <Send
+                aria-hidden
+                className="size-7 text-[var(--text-tertiary)]"
+              />
               <p className="text-sm text-[var(--text-secondary)]">
                 Nenhuma publicação registrada ainda.
               </p>

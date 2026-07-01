@@ -80,7 +80,9 @@ export function NovoProdutoForm({ clientes }: { clientes: ClienteOption[] }) {
   return (
     <form className="grid gap-5" onSubmit={handleSubmit}>
       <label className="grid gap-2 text-[var(--text-primary)]">
-        <span className="text-caption text-[var(--text-tertiary)]">Cliente</span>
+        <span className="text-caption text-[var(--text-tertiary)]">
+          Cliente
+        </span>
         <select
           className={selectClass}
           disabled={submitting}
@@ -130,7 +132,9 @@ export function NovoProdutoForm({ clientes }: { clientes: ClienteOption[] }) {
       </div>
 
       <label className="grid gap-2 text-[var(--text-primary)] sm:max-w-xs">
-        <span className="text-caption text-[var(--text-tertiary)]">Condição</span>
+        <span className="text-caption text-[var(--text-tertiary)]">
+          Condição
+        </span>
         <select
           className={selectClass}
           disabled={submitting}

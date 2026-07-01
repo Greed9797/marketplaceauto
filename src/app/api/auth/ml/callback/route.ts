@@ -1,13 +1,15 @@
-import { PublisherPlatform } from "@prisma/client";
+import { ConnectorProvider, ConnectorStatus } from "@prisma/client";
 import { NextResponse, type NextRequest } from "next/server";
 
 import { getCurrentUserContext } from "@/lib/auth/current";
 import { canOperateWorkspaceConnectors } from "@/lib/auth/platform-permissions";
+import { buildConnectorBackfillEvent } from "@/lib/connectors/backfill";
+import { vaultCredentialFields } from "@/lib/connectors/credentials";
 import { MercadoLivreClient } from "@/lib/connectors/mercado-livre/client";
 import { isNextControlFlowError } from "@/lib/connectors/oauth-route-error";
 import { prisma } from "@/lib/db/prisma";
+import { inngest } from "@/lib/jobs/inngest-client";
 import { resolveClienteForWorkspace } from "@/lib/publisher/cliente-access";
-import { encryptClienteTokens } from "@/lib/publisher/cliente-tokens";
 import { getMlEnvConfig } from "@/lib/publisher/ml-env-config";
 import {
   clearOAuthCookie,
@@ -65,9 +67,10 @@ async function handleCallback(request: NextRequest) {
     return redirectClientes(request, { error: "forbidden" });
   }
 
+  const workspaceId = context.currentWorkspace.id;
   const cliente = await resolveClienteForWorkspace({
     clienteId,
-    workspaceId: context.currentWorkspace.id,
+    workspaceId,
   });
   if (!cliente) {
     return redirectClientes(request, { error: "cliente-not-found" });
@@ -85,31 +88,55 @@ async function handleCallback(request: NextRequest) {
     return redirectClientes(request, { error: "oauth-failed" });
   }
 
-  const tokenFields = encryptClienteTokens({
-    accessToken: token.accessToken,
+  // Single source of truth: the publisher OAuth connection now lives on the
+  // same ConnectorAccount that the order-sync/dashboard read, tied to the
+  // Cliente via clienteId. Credentials use the shared vault envelope.
+  const credentialFields = await vaultCredentialFields({
+    workspaceId,
+    provider: ConnectorProvider.MERCADO_LIVRE,
+    externalAccountId: sellerId,
+    credentials: { accessToken: token.accessToken },
     refreshToken: token.refreshToken,
+    tokenExpiresAt: new Date(Date.now() + token.expiresIn * 1000),
   });
 
-  await prisma.clienteConnection.upsert({
+  const connectorAccount = await prisma.connectorAccount.upsert({
     where: {
-      clienteId_platform: {
-        clienteId: cliente.id,
-        platform: PublisherPlatform.MERCADO_LIVRE,
+      workspaceId_provider_externalAccountId: {
+        workspaceId,
+        provider: ConnectorProvider.MERCADO_LIVRE,
+        externalAccountId: sellerId,
       },
     },
     update: {
-      ...tokenFields,
-      externalId: sellerId,
-      expiresAt: new Date(Date.now() + token.expiresIn * 1000),
+      clienteId: cliente.id,
+      accountName: `${cliente.nome} — Mercado Livre`,
+      status: ConnectorStatus.ACTIVE,
+      ...credentialFields,
+      metadata: { scope: token.scope },
+      lastSyncError: null,
     },
     create: {
+      workspaceId,
       clienteId: cliente.id,
-      platform: PublisherPlatform.MERCADO_LIVRE,
-      ...tokenFields,
-      externalId: sellerId,
-      expiresAt: new Date(Date.now() + token.expiresIn * 1000),
+      provider: ConnectorProvider.MERCADO_LIVRE,
+      externalAccountId: sellerId,
+      accountName: `${cliente.nome} — Mercado Livre`,
+      status: ConnectorStatus.ACTIVE,
+      ...credentialFields,
+      metadata: { scope: token.scope },
     },
   });
+
+  if (process.env.INNGEST_EVENT_KEY) {
+    await inngest.send(
+      buildConnectorBackfillEvent({
+        provider: ConnectorProvider.MERCADO_LIVRE,
+        connectorAccountId: connectorAccount.id,
+        scopes: token.scope,
+      }),
+    );
+  }
 
   return redirectClientes(request, { connected: "ml" });
 }

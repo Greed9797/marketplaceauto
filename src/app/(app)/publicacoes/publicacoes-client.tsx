@@ -43,7 +43,9 @@ export function PublicacoesFilters({
   return (
     <div className="grid gap-4 sm:grid-cols-3">
       <label className="grid gap-2 text-[var(--text-primary)]">
-        <span className="text-caption text-[var(--text-tertiary)]">Cliente</span>
+        <span className="text-caption text-[var(--text-tertiary)]">
+          Cliente
+        </span>
         <select
           className={selectClass}
           disabled={isPending}
@@ -111,10 +113,9 @@ export function RetryButton({ publicacaoId }: { publicacaoId: string }) {
     setError(null);
     setRetrying(true);
     try {
-      const response = await fetch(
-        `/api/publicacoes/${publicacaoId}/retry`,
-        { method: "POST" },
-      );
+      const response = await fetch(`/api/publicacoes/${publicacaoId}/retry`, {
+        method: "POST",
+      });
       if (!response.ok) {
         const data = (await response.json().catch(() => null)) as {
           error?: string;

@@ -114,7 +114,11 @@ export function ProdutoEditForm({ produto }: { produto: ProdutoEditData }) {
     if (!raw) return null;
     try {
       const parsed = JSON.parse(raw) as unknown;
-      if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+      if (
+        typeof parsed !== "object" ||
+        parsed === null ||
+        Array.isArray(parsed)
+      ) {
         return undefined;
       }
       return parsed as Record<string, unknown>;
@@ -330,7 +334,9 @@ export function ProdutoEditForm({ produto }: { produto: ProdutoEditData }) {
           label="Categoria Shopee (ID)"
           min={0}
           name="categoriaShopeeId"
-          onChange={(event) => setField("categoriaShopeeId", event.target.value)}
+          onChange={(event) =>
+            setField("categoriaShopeeId", event.target.value)
+          }
           type="number"
           value={values.categoriaShopeeId}
         />

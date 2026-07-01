@@ -1,14 +1,20 @@
-import { Prisma, type ClienteConnection, type Produto } from "@prisma/client";
+import {
+  ConnectorProvider,
+  ConnectorStatus,
+  Prisma,
+  type ConnectorAccount,
+  type Produto,
+} from "@prisma/client";
 
+import {
+  connectorAccessTokenFromAccount,
+  connectorRefreshTokenFromAccount,
+  vaultCredentialFields,
+} from "@/lib/connectors/credentials";
 import { MercadoLivreClient } from "@/lib/connectors/mercado-livre/client";
 import type { MercadoLivreConfig } from "@/lib/connectors/mercado-livre/oauth";
 import { prisma } from "@/lib/db/prisma";
 
-import {
-  decryptClienteAccessToken,
-  decryptClienteRefreshToken,
-  encryptClienteTokens,
-} from "./cliente-tokens";
 import { getMlEnvConfig } from "./ml-env-config";
 
 /** Refresh the ML token this many seconds before expiry (tokens live ~6h). */
@@ -192,21 +198,23 @@ export function buildMlItemPayload(input: {
 }
 
 /**
- * Resolves a valid ML access token for a Cliente, refreshing (and persisting)
- * via `MercadoLivreClient` when near expiry.
+ * Resolves a valid ML access token for a Cliente's `ConnectorAccount` — the
+ * single source of truth also read by the order sync. Refreshes (and persists
+ * back onto the SAME account) via `MercadoLivreClient` when near expiry. Writing
+ * back to one store fixes the refresh-token invalidation of the old dual store.
  */
 async function resolveMlToken(input: {
   config: MercadoLivreConfig;
-  connection: ClienteConnection;
+  account: ConnectorAccount;
 }): Promise<string> {
-  const { connection } = input;
-  const expiresAt = connection.expiresAt?.getTime() ?? 0;
+  const { account } = input;
+  const expiresAt = account.tokenExpiresAt?.getTime() ?? 0;
   const stillValid = expiresAt - Date.now() > TOKEN_REFRESH_SKEW_SECONDS * 1000;
   if (stillValid) {
-    return decryptClienteAccessToken(connection);
+    return connectorAccessTokenFromAccount(account);
   }
 
-  const refreshToken = decryptClienteRefreshToken(connection);
+  const refreshToken = await connectorRefreshTokenFromAccount(account);
   if (!refreshToken) {
     throw new Error(
       "Conexão Mercado Livre sem refresh token — reconecte a conta.",
@@ -216,17 +224,18 @@ async function resolveMlToken(input: {
   const client = new MercadoLivreClient({ config: input.config });
   const refreshed = await client.refreshAccessToken(refreshToken);
 
-  const encrypted = encryptClienteTokens({
-    accessToken: refreshed.accessToken,
+  const credentialFields = await vaultCredentialFields({
+    workspaceId: account.workspaceId,
+    provider: ConnectorProvider.MERCADO_LIVRE,
+    externalAccountId: account.externalAccountId,
+    credentials: { accessToken: refreshed.accessToken },
     refreshToken: refreshed.refreshToken ?? refreshToken,
+    tokenExpiresAt: new Date(Date.now() + refreshed.expiresIn * 1000),
   });
 
-  await prisma.clienteConnection.update({
-    where: { id: connection.id },
-    data: {
-      ...encrypted,
-      expiresAt: new Date(Date.now() + refreshed.expiresIn * 1000),
-    },
+  await prisma.connectorAccount.update({
+    where: { id: account.id },
+    data: credentialFields,
   });
 
   return refreshed.accessToken;
@@ -259,15 +268,14 @@ export async function publishProdutoToMl(input: {
     throw new Error("Produto não encontrado.");
   }
 
-  const connection = await prisma.clienteConnection.findUnique({
+  const account = await prisma.connectorAccount.findFirst({
     where: {
-      clienteId_platform: {
-        clienteId: input.clienteId,
-        platform: "MERCADO_LIVRE",
-      },
+      clienteId: input.clienteId,
+      provider: ConnectorProvider.MERCADO_LIVRE,
+      status: ConnectorStatus.ACTIVE,
     },
   });
-  if (!connection) {
+  if (!account) {
     throw new Error("Conta Mercado Livre não conectada para este cliente.");
   }
 
@@ -277,7 +285,7 @@ export async function publishProdutoToMl(input: {
   });
 
   try {
-    const accessToken = await resolveMlToken({ config, connection });
+    const accessToken = await resolveMlToken({ config, account });
     const apiBaseUrl = config.apiBaseUrl;
 
     const categoryId = await resolveMlCategoryId({

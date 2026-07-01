@@ -169,6 +169,11 @@ model ConnectorAccount {
   id                        String               @id @default(cuid())
   workspaceId               String
   workspace                 Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  // When set, this connector account was created by the publisher OAuth flow on
+  // behalf of a managed brand (Cliente). Null for workspace-level connectors.
+  // Publisher and order-sync/dashboard now share this single token store.
+  clienteId                 String?
+  cliente                   Cliente?             @relation(fields: [clienteId], references: [id], onDelete: SetNull)
   provider                  ConnectorProvider
   externalAccountId         String
   accountName               String
@@ -196,6 +201,7 @@ model ConnectorAccount {
 
   @@unique([workspaceId, provider, externalAccountId])
   @@index([workspaceId, provider])
+  @@index([clienteId])
 }
 
 model ConnectorProviderConfig {
@@ -540,34 +546,10 @@ model Cliente {
   ativo              Boolean             @default(true)
   createdAt          DateTime            @default(now())
   updatedAt          DateTime            @updatedAt
-  connections        ClienteConnection[]
+  connectorAccounts  ConnectorAccount[]
   produtos           Produto[]
 
   @@index([workspaceId])
-}
-
-/// A marketplace OAuth connection owned by a Cliente. Tokens are stored
-/// AES-256-GCM encrypted with the same envelope shape as `ConnectorAccount`
-/// (accessTokenCiphertext + tokenIv + tokenAuthTag + tokenKeyVersion), keyed by
-/// `TOKEN_ENCRYPTION_KEY`. `externalId` holds the marketplace account id
-/// (Shopee shop_id / Mercado Livre user_id).
-model ClienteConnection {
-  id                     String            @id @default(cuid())
-  clienteId              String
-  cliente                Cliente           @relation(fields: [clienteId], references: [id], onDelete: Cascade)
-  platform               PublisherPlatform
-  accessTokenCiphertext  String
-  refreshTokenCiphertext String?
-  tokenIv                String
-  tokenAuthTag           String
-  tokenKeyVersion        String            @default("v1")
-  externalId             String
-  expiresAt              DateTime?
-  createdAt              DateTime          @default(now())
-  updatedAt              DateTime          @updatedAt
-
-  @@unique([clienteId, platform])
-  @@index([clienteId])
 }
 
 /// A product draft owned by a Cliente. Holds the marketplace-specific listing

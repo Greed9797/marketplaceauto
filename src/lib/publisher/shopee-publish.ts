@@ -1,15 +1,21 @@
-import { Prisma, type ClienteConnection, type Produto } from "@prisma/client";
+import {
+  ConnectorProvider,
+  ConnectorStatus,
+  Prisma,
+  type ConnectorAccount,
+  type Produto,
+} from "@prisma/client";
 
+import {
+  connectorAccessTokenFromAccount,
+  connectorRefreshTokenFromAccount,
+  vaultCredentialFields,
+} from "@/lib/connectors/credentials";
 import { ShopeeClient } from "@/lib/connectors/shopee/client";
 import type { ShopeeConfig } from "@/lib/connectors/shopee/oauth";
 import { signShopRequest } from "@/lib/connectors/shopee/signer";
 import { prisma } from "@/lib/db/prisma";
 
-import {
-  decryptClienteAccessToken,
-  decryptClienteRefreshToken,
-  encryptClienteTokens,
-} from "./cliente-tokens";
 import { getShopeeEnvConfig } from "./shopee-env-config";
 
 /**
@@ -192,30 +198,32 @@ export function buildShopeeAddItemPayload(input: {
 }
 
 /**
- * Resolves a valid Shopee access token for a Cliente, refreshing (and
- * persisting) via `ShopeeClient` when the stored token is near expiry. Reuses
- * the shared AES-256-GCM token vault for decrypt/re-encrypt.
+ * Resolves a valid Shopee access token for a Cliente's `ConnectorAccount` — the
+ * single source of truth also read by the order sync. Refreshes (and persists
+ * back onto the SAME account) via `ShopeeClient` when the stored token is near
+ * expiry, reusing the shared vault envelope. Writing back to one store fixes the
+ * refresh-token invalidation caused by the previous dual-store design.
  */
 async function resolveShopeeToken(input: {
   config: ShopeeConfig;
-  connection: ClienteConnection;
+  account: ConnectorAccount;
 }): Promise<ShopeeResolvedToken> {
-  const { connection } = input;
-  const shopId = Number(connection.externalId);
+  const { account } = input;
+  const shopId = Number(account.externalAccountId);
   if (!Number.isFinite(shopId) || shopId <= 0) {
     throw new Error("Conexão Shopee sem shop_id válido.");
   }
 
-  const expiresAt = connection.expiresAt?.getTime() ?? 0;
+  const expiresAt = account.tokenExpiresAt?.getTime() ?? 0;
   const stillValid = expiresAt - Date.now() > TOKEN_REFRESH_SKEW_SECONDS * 1000;
   if (stillValid) {
     return {
-      accessToken: decryptClienteAccessToken(connection),
+      accessToken: await connectorAccessTokenFromAccount(account),
       shopId,
     };
   }
 
-  const refreshToken = decryptClienteRefreshToken(connection);
+  const refreshToken = await connectorRefreshTokenFromAccount(account);
   if (!refreshToken) {
     throw new Error("Conexão Shopee sem refresh token — reconecte a conta.");
   }
@@ -223,17 +231,18 @@ async function resolveShopeeToken(input: {
   const client = new ShopeeClient({ config: input.config });
   const refreshed = await client.refreshAccessToken({ refreshToken, shopId });
 
-  const encrypted = encryptClienteTokens({
-    accessToken: refreshed.accessToken,
+  const credentialFields = await vaultCredentialFields({
+    workspaceId: account.workspaceId,
+    provider: ConnectorProvider.SHOPEE,
+    externalAccountId: account.externalAccountId,
+    credentials: { accessToken: refreshed.accessToken },
     refreshToken: refreshed.refreshToken ?? refreshToken,
+    tokenExpiresAt: new Date(Date.now() + refreshed.expiresIn * 1000),
   });
 
-  await prisma.clienteConnection.update({
-    where: { id: connection.id },
-    data: {
-      ...encrypted,
-      expiresAt: new Date(Date.now() + refreshed.expiresIn * 1000),
-    },
+  await prisma.connectorAccount.update({
+    where: { id: account.id },
+    data: credentialFields,
   });
 
   return { accessToken: refreshed.accessToken, shopId };
@@ -267,15 +276,14 @@ export async function publishProdutoToShopee(input: {
     throw new Error("Produto não encontrado.");
   }
 
-  const connection = await prisma.clienteConnection.findUnique({
+  const account = await prisma.connectorAccount.findFirst({
     where: {
-      clienteId_platform: {
-        clienteId: input.clienteId,
-        platform: "SHOPEE",
-      },
+      clienteId: input.clienteId,
+      provider: ConnectorProvider.SHOPEE,
+      status: ConnectorStatus.ACTIVE,
     },
   });
-  if (!connection) {
+  if (!account) {
     throw new Error("Conta Shopee não conectada para este cliente.");
   }
 
@@ -291,7 +299,7 @@ export async function publishProdutoToShopee(input: {
 
     const { accessToken, shopId } = await resolveShopeeToken({
       config,
-      connection,
+      account,
     });
 
     const logisticId = await getFirstEnabledLogisticId({

@@ -21,7 +21,9 @@ export function ProdutosFilter({
 
   function handleChange(event: React.ChangeEvent<HTMLSelectElement>) {
     const value = event.target.value;
-    const href = value ? `/produtos?clienteId=${encodeURIComponent(value)}` : "/produtos";
+    const href = value
+      ? `/produtos?clienteId=${encodeURIComponent(value)}`
+      : "/produtos";
     startTransition(() => router.push(href));
   }
 
@@ -62,7 +64,8 @@ export function ProdutoRowActions({ produtoId }: { produtoId: string }) {
     setError(null);
     setPublishing(target);
     try {
-      const endpoint = target === "shopee" ? "/api/shopee/publicar" : "/api/ml/publicar";
+      const endpoint =
+        target === "shopee" ? "/api/shopee/publicar" : "/api/ml/publicar";
       const response = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -153,9 +156,7 @@ export function ProdutoRowActions({ produtoId }: { produtoId: string }) {
           )}
         </Button>
       </div>
-      {error ? (
-        <p className="text-xs text-[var(--danger)]">{error}</p>
-      ) : null}
+      {error ? <p className="text-xs text-[var(--danger)]">{error}</p> : null}
     </div>
   );
 }

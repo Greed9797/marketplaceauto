@@ -40,7 +40,9 @@ export default async function ProdutoEditarPage({
     descricao: produto.descricao ?? "",
     categoriaMlId: produto.categoriaMlId ?? "",
     categoriaShopeeId:
-      produto.categoriaShopeeId !== null ? String(produto.categoriaShopeeId) : "",
+      produto.categoriaShopeeId !== null
+        ? String(produto.categoriaShopeeId)
+        : "",
     preco: String(produto.preco),
     quantidade: String(produto.quantidade),
     condicao: produto.condicao,

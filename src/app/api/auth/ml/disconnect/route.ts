@@ -1,4 +1,4 @@
-import { PublisherPlatform } from "@prisma/client";
+import { ConnectorProvider, ConnectorStatus } from "@prisma/client";
 import { NextResponse, type NextRequest } from "next/server";
 
 import { getCurrentUserContext } from "@/lib/auth/current";
@@ -54,10 +54,26 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    await prisma.clienteConnection.deleteMany({
+    // Soft delete: REVOKE + blank credentials instead of hard-deleting. A hard
+    // delete cascades into EcommerceOrder/DailyMetric/SyncJob, wiping the
+    // Cliente's historical order facts. REVOKED accounts stop syncing and are
+    // rejected by the publisher; reconnecting upserts the same unique row back
+    // to ACTIVE with fresh tokens.
+    await prisma.connectorAccount.updateMany({
       where: {
         clienteId: cliente.id,
-        platform: PublisherPlatform.MERCADO_LIVRE,
+        provider: ConnectorProvider.MERCADO_LIVRE,
+      },
+      data: {
+        status: ConnectorStatus.REVOKED,
+        accessTokenCiphertext: "",
+        refreshTokenCiphertext: null,
+        tokenIv: "",
+        tokenAuthTag: "",
+        credentialSecretId: null,
+        refreshCredentialSecretId: null,
+        tokenExpiresAt: null,
+        lastSyncError: null,
       },
     });
 

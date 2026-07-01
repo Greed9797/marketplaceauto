@@ -21,7 +21,9 @@ function firstParam(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value;
 }
 
-export default async function ProdutosPage({ searchParams }: ProdutosPageProps) {
+export default async function ProdutosPage({
+  searchParams,
+}: ProdutosPageProps) {
   const params = await searchParams;
   const context = await getCurrentUserContext();
   const workspaceId = context.currentWorkspace.id;
@@ -81,7 +83,10 @@ export default async function ProdutosPage({ searchParams }: ProdutosPageProps) 
         <Card>
           <CardContent>
             <div className="flex flex-col items-center gap-3 py-10 text-center">
-              <Package aria-hidden className="size-7 text-[var(--text-tertiary)]" />
+              <Package
+                aria-hidden
+                className="size-7 text-[var(--text-tertiary)]"
+              />
               <p className="text-sm text-[var(--text-secondary)]">
                 Cadastre um cliente antes de criar produtos.
               </p>
@@ -95,7 +100,10 @@ export default async function ProdutosPage({ searchParams }: ProdutosPageProps) 
         <Card>
           <CardContent>
             <div className="flex flex-col items-center gap-3 py-10 text-center">
-              <Package aria-hidden className="size-7 text-[var(--text-tertiary)]" />
+              <Package
+                aria-hidden
+                className="size-7 text-[var(--text-tertiary)]"
+              />
               <p className="text-sm text-[var(--text-secondary)]">
                 Nenhum produto encontrado.
               </p>

@@ -1,7 +1,7 @@
 // The "Conectar" buttons are intentional full-page navigations to /api/auth/*
 // OAuth initiators (they 302 to Shopee/Mercado Livre), not client-side page
 // links, so they use a plain <a> rather than next/link.
-import { PublisherPlatform } from "@prisma/client";
+import { ConnectorProvider, ConnectorStatus } from "@prisma/client";
 import { CheckCircle2, CircleAlert, Store, Users } from "lucide-react";
 import Link from "next/link";
 
@@ -60,7 +60,15 @@ export default async function ClientesPage({
     where: { workspaceId: context.currentWorkspace.id },
     orderBy: { createdAt: "desc" },
     include: {
-      connections: { select: { platform: true, externalId: true } },
+      connectorAccounts: {
+        where: {
+          provider: {
+            in: [ConnectorProvider.SHOPEE, ConnectorProvider.MERCADO_LIVRE],
+          },
+          status: ConnectorStatus.ACTIVE,
+        },
+        select: { provider: true, externalAccountId: true },
+      },
     },
   });
 
@@ -121,12 +129,11 @@ export default async function ClientesPage({
       ) : (
         <div className="grid gap-4">
           {clientes.map((cliente) => {
-            const shopee = cliente.connections.find(
-              (connection) => connection.platform === PublisherPlatform.SHOPEE,
+            const shopee = cliente.connectorAccounts.find(
+              (account) => account.provider === ConnectorProvider.SHOPEE,
             );
-            const ml = cliente.connections.find(
-              (connection) =>
-                connection.platform === PublisherPlatform.MERCADO_LIVRE,
+            const ml = cliente.connectorAccounts.find(
+              (account) => account.provider === ConnectorProvider.MERCADO_LIVRE,
             );
 
             return (
@@ -157,7 +164,7 @@ export default async function ClientesPage({
                       clienteId={cliente.id}
                       connectHref={`/api/auth/shopee?cliente_id=${cliente.id}`}
                       connected={Boolean(shopee)}
-                      externalId={shopee?.externalId ?? null}
+                      externalId={shopee?.externalAccountId ?? null}
                       platform="shopee"
                       title="Shopee"
                     />
@@ -166,7 +173,7 @@ export default async function ClientesPage({
                       clienteId={cliente.id}
                       connectHref={`/api/auth/ml?cliente_id=${cliente.id}`}
                       connected={Boolean(ml)}
-                      externalId={ml?.externalId ?? null}
+                      externalId={ml?.externalAccountId ?? null}
                       platform="ml"
                       title="Mercado Livre"
                     />

@@ -14,7 +14,8 @@ type RouteContext = {
   params: Promise<{ id: string }>;
 };
 
-const emptyToNull = (value: string) => (value.trim() === "" ? null : value.trim());
+const emptyToNull = (value: string) =>
+  value.trim() === "" ? null : value.trim();
 
 const updateClienteSchema = z.object({
   nome: z.string().trim().min(1, "Nome é obrigatório.").max(200),
