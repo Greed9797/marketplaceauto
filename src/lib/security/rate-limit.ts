@@ -29,8 +29,13 @@ export function classifyRateLimitTarget(input: {
 }): RateLimitTarget | null {
   const method = input.method.toUpperCase();
 
+  // Only rate-limit auth *mutations* (login/callback/signout are non-GET).
+  // NextAuth polls GET /api/auth/session, /csrf, /providers on every page load;
+  // classifying those as "auth" made each one await Upstash and — when the
+  // limiter is unreachable — hang the Edge middleware into a 504
+  // MIDDLEWARE_INVOCATION_TIMEOUT. GETs skip the limiter entirely.
   if (
-    input.pathname.startsWith("/api/auth") ||
+    (input.pathname.startsWith("/api/auth") && method !== "GET") ||
     (method === "POST" && authPaths.has(input.pathname))
   ) {
     return { keyPrefix: "auth", limit: 10, window: "15 m" };
@@ -111,6 +116,30 @@ async function sha256Hex(value: string) {
   return Array.from(new Uint8Array(digest))
     .map((byte) => byte.toString(16).padStart(2, "0"))
     .join("");
+}
+
+/**
+ * Hard ceiling for the Upstash round-trip. A healthy REST call returns in
+ * <100ms; if the configured instance is unreachable/expired the socket can hang
+ * indefinitely and the Edge middleware gets killed with a 504
+ * MIDDLEWARE_INVOCATION_TIMEOUT. Racing against this timeout turns that into a
+ * fast fail (open for non-auth, closed for auth) so the app never 504s.
+ */
+const RATE_LIMIT_TIMEOUT_MS = 1000;
+
+async function limitWithTimeout(target: RateLimitTarget, key: string) {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(
+      () => reject(new Error("rate-limit upstash timeout")),
+      RATE_LIMIT_TIMEOUT_MS,
+    );
+  });
+  try {
+    return await Promise.race([rateLimiterFor(target).limit(key), timeout]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 const ratelimitCache = new Map<string, Ratelimit>();
@@ -207,7 +236,8 @@ export async function rateLimitMiddleware(request: NextRequest) {
   // so a blip can't break the app; for auth routes in prod we fail CLOSED (503)
   // rather than leave login unthrottled.
   try {
-    const result = await rateLimiterFor(target).limit(
+    const result = await limitWithTimeout(
+      target,
       `${target.keyPrefix}:${clientIp(request)}:${sessionFingerprint}:${request.nextUrl.pathname}`,
     );
 

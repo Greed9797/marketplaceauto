@@ -64,6 +64,23 @@ describe("production rate limit helpers", () => {
     ).toBeNull();
   });
 
+  it("skips NextAuth GET reads but still limits auth mutations", () => {
+    // Hot path — must NOT touch Upstash (was causing 504 hangs on a dead limiter).
+    expect(
+      classifyRateLimitTarget({ pathname: "/api/auth/session", method: "GET" }),
+    ).toBeNull();
+    expect(
+      classifyRateLimitTarget({ pathname: "/api/auth/csrf", method: "GET" }),
+    ).toBeNull();
+    // Credential/callback mutations still fail-closed under rate limiting.
+    expect(
+      classifyRateLimitTarget({
+        pathname: "/api/auth/callback/credentials",
+        method: "POST",
+      }),
+    ).toMatchObject({ keyPrefix: "auth" });
+  });
+
   it("treats missing Upstash envs as production misconfiguration", () => {
     expect(rateLimitConfigError({ NODE_ENV: "production" })).toBe(
       "UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN are required for production rate limiting.",
