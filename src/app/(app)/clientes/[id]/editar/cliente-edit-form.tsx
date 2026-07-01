@@ -14,6 +14,7 @@ export type ClienteEditData = {
   exemplosTitulos: string;
   exemplosDescricoes: string;
   dadosFiscais: string;
+  comissaoPercent: string;
 };
 
 const textareaClass =
@@ -56,6 +57,7 @@ export function ClienteEditForm({ cliente }: { cliente: ClienteEditData }) {
           exemplosTitulos: values.exemplosTitulos,
           exemplosDescricoes: values.exemplosDescricoes,
           dadosFiscais: values.dadosFiscais,
+          comissaoPercent: values.comissaoPercent,
         }),
       });
       const body = (await response.json().catch(() => null)) as {
@@ -95,6 +97,15 @@ export function ClienteEditForm({ cliente }: { cliente: ClienteEditData }) {
           onChange={(event) => setField("nicho", event.target.value)}
           placeholder="Ex.: Moda feminina"
           value={values.nicho}
+        />
+        <Input
+          disabled={saving}
+          inputMode="decimal"
+          label="Comissão (%)"
+          name="comissaoPercent"
+          onChange={(event) => setField("comissaoPercent", event.target.value)}
+          placeholder="Ex.: 5"
+          value={values.comissaoPercent}
         />
       </div>
 

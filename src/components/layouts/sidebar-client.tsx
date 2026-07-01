@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  FileBarChart,
   HelpCircle,
   LayoutDashboard,
   LogOut,
@@ -32,6 +33,7 @@ export type SidebarIconKey =
   | "clientes"
   | "produtos"
   | "publicacoes"
+  | "relatorios"
   | "users"
   | "connectors"
   | "profile"
@@ -67,6 +69,7 @@ const iconMap: Record<SidebarIconKey, LucideIcon> = {
   clientes: Store,
   produtos: Package,
   publicacoes: Send,
+  relatorios: FileBarChart,
   users: UsersRound,
   connectors: PlugZap,
   profile: UserCircle,

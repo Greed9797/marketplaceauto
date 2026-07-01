@@ -543,6 +543,9 @@ model Cliente {
   exemplosTitulos    String?
   exemplosDescricoes String?
   dadosFiscais       String?
+  /// Percentual de comissão da agência sobre o faturamento deste cliente
+  /// (ex.: 5.00 = 5%). Usado no relatório consolidado. Null = 0% (sem comissão).
+  comissaoPercent    Decimal?            @db.Decimal(5, 2)
   ativo              Boolean             @default(true)
   createdAt          DateTime            @default(now())
   updatedAt          DateTime            @updatedAt

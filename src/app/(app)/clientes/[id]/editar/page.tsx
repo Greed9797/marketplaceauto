@@ -41,6 +41,8 @@ export default async function ClienteEditarPage({
     exemplosTitulos: cliente.exemplosTitulos ?? "",
     exemplosDescricoes: cliente.exemplosDescricoes ?? "",
     dadosFiscais: cliente.dadosFiscais ?? "",
+    comissaoPercent:
+      cliente.comissaoPercent != null ? String(cliente.comissaoPercent) : "",
   };
 
   return (

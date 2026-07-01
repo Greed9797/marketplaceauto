@@ -44,6 +44,21 @@ const updateClienteSchema = z.object({
     .transform(emptyToNull)
     .nullable()
     .optional(),
+  comissaoPercent: z
+    .union([z.string(), z.number(), z.null()])
+    .transform((value) =>
+      typeof value === "string" ? value.trim().replace(",", ".") : value,
+    )
+    .transform((value) =>
+      value === "" || value === null ? null : Number(value),
+    )
+    .refine(
+      (value) =>
+        value === null ||
+        (Number.isFinite(value) && value >= 0 && value <= 100),
+      "Comissão deve estar entre 0 e 100.",
+    )
+    .optional(),
 });
 
 export async function PUT(request: NextRequest, context: RouteContext) {
@@ -79,6 +94,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
         exemplosTitulos: parsed.data.exemplosTitulos ?? null,
         exemplosDescricoes: parsed.data.exemplosDescricoes ?? null,
         dadosFiscais: parsed.data.dadosFiscais ?? null,
+        comissaoPercent: parsed.data.comissaoPercent ?? null,
       },
     });
 

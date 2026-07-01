@@ -67,6 +67,12 @@ export function Sidebar({ context }: { context: AppContext }) {
             section: "manage" as const,
           },
           {
+            label: "Relatórios",
+            href: "/relatorios",
+            icon: "relatorios" as const,
+            section: "manage" as const,
+          },
+          {
             label: "Conectores",
             href: "/connectors",
             icon: "connectors" as const,
