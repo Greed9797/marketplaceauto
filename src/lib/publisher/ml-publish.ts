@@ -125,7 +125,9 @@ export async function createMlItem(input: {
     };
   }
 
-  throw new Error(`Mercado Livre não retornou item id: ${JSON.stringify(data)}`);
+  throw new Error(
+    `Mercado Livre não retornou item id: ${JSON.stringify(data)}`,
+  );
 }
 
 /** Attaches a plain-text description to a freshly created item. */
@@ -206,7 +208,9 @@ async function resolveMlToken(input: {
 
   const refreshToken = decryptClienteRefreshToken(connection);
   if (!refreshToken) {
-    throw new Error("Conexão Mercado Livre sem refresh token — reconecte a conta.");
+    throw new Error(
+      "Conexão Mercado Livre sem refresh token — reconecte a conta.",
+    );
   }
 
   const client = new MercadoLivreClient({ config: input.config });

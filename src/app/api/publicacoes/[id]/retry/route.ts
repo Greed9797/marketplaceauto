@@ -50,8 +50,13 @@ export async function POST(_request: NextRequest, context: RouteContext) {
   } catch (error: unknown) {
     if (isNextControlFlowError(error)) throw error;
     const message =
-      error instanceof Error ? error.message : "Falha ao reprocessar publicação.";
+      error instanceof Error
+        ? error.message
+        : "Falha ao reprocessar publicação.";
     console.error(`[api/publicacoes/:id/retry] failed: ${message}`);
-    return NextResponse.json({ success: false, error: message }, { status: 500 });
+    return NextResponse.json(
+      { success: false, error: message },
+      { status: 500 },
+    );
   }
 }

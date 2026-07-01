@@ -43,7 +43,9 @@ function isRecord(value: unknown): value is Record<string, unknown> {
  * because `ShopeeClient` only exposes shop *reads* (order sync) — publishing
  * needs POSTs to `product.*` / `media_space.*` that the client does not wrap.
  */
-async function shopeeShopRequest(input: ShopeeShopRequestInput): Promise<unknown> {
+async function shopeeShopRequest(
+  input: ShopeeShopRequestInput,
+): Promise<unknown> {
   const method = input.method ?? "GET";
   const timestamp = Math.floor(Date.now() / 1000);
   const sign = signShopRequest({
@@ -312,8 +314,17 @@ export async function publishProdutoToShopee(input: {
       if (imageId) imageIds.push(imageId);
     }
 
-    const payload = buildShopeeAddItemPayload({ produto, logisticId, imageIds });
-    const itemId = await addShopeeItem({ config, accessToken, shopId, payload });
+    const payload = buildShopeeAddItemPayload({
+      produto,
+      logisticId,
+      imageIds,
+    });
+    const itemId = await addShopeeItem({
+      config,
+      accessToken,
+      shopId,
+      payload,
+    });
 
     await prisma.$transaction([
       prisma.produto.update({

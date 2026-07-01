@@ -3,6 +3,7 @@
 // links, so they use a plain <a> rather than next/link.
 import { PublisherPlatform } from "@prisma/client";
 import { CheckCircle2, CircleAlert, Store, Users } from "lucide-react";
+import Link from "next/link";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getCurrentUserContext } from "@/lib/auth/current";
@@ -140,6 +141,14 @@ export default async function ClientesPage({
                       {cliente.nome}
                     </span>
                   </div>
+                  {canOperate ? (
+                    <Link
+                      className="text-sm font-medium text-[var(--w3-red)] hover:underline"
+                      href={`/clientes/${cliente.id}/editar`}
+                    >
+                      Editar
+                    </Link>
+                  ) : null}
                 </CardHeader>
                 <CardContent>
                   <div className="grid gap-4 sm:grid-cols-2">

@@ -4,8 +4,10 @@ import {
   HelpCircle,
   LayoutDashboard,
   LogOut,
+  Package,
   PanelsTopLeft,
   PlugZap,
+  Send,
   Settings,
   Store,
   Timer,
@@ -28,6 +30,8 @@ export type SidebarIconKey =
   | "dashboard"
   | "brands"
   | "clientes"
+  | "produtos"
+  | "publicacoes"
   | "users"
   | "connectors"
   | "profile"
@@ -61,6 +65,8 @@ const iconMap: Record<SidebarIconKey, LucideIcon> = {
   dashboard: LayoutDashboard,
   brands: PanelsTopLeft,
   clientes: Store,
+  produtos: Package,
+  publicacoes: Send,
   users: UsersRound,
   connectors: PlugZap,
   profile: UserCircle,

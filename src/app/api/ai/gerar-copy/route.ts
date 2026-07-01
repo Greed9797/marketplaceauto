@@ -64,8 +64,13 @@ export async function POST(request: NextRequest) {
   } catch (error: unknown) {
     if (isNextControlFlowError(error)) throw error;
     const message =
-      error instanceof Error ? error.message : "Falha ao gerar copy com Gemini.";
+      error instanceof Error
+        ? error.message
+        : "Falha ao gerar copy com Gemini.";
     console.error(`[api/ai/gerar-copy] failed: ${message}`);
-    return NextResponse.json({ success: false, error: message }, { status: 500 });
+    return NextResponse.json(
+      { success: false, error: message },
+      { status: 500 },
+    );
   }
 }

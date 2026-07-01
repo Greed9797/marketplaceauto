@@ -45,6 +45,9 @@ export async function POST(request: NextRequest) {
         ? error.message
         : "Falha ao publicar no Mercado Livre.";
     console.error(`[api/ml/publicar] failed: ${message}`);
-    return NextResponse.json({ success: false, error: message }, { status: 500 });
+    return NextResponse.json(
+      { success: false, error: message },
+      { status: 500 },
+    );
   }
 }

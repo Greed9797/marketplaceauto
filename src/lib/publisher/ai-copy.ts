@@ -155,7 +155,9 @@ export async function gerarCopy(input: {
   });
 
   if (!response.ok) {
-    throw new Error(`Falha ao gerar copy com Gemini (HTTP ${response.status}).`);
+    throw new Error(
+      `Falha ao gerar copy com Gemini (HTTP ${response.status}).`,
+    );
   }
 
   const payload: unknown = await response.json();
