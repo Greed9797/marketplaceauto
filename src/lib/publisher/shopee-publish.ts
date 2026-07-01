@@ -275,6 +275,13 @@ export async function publishProdutoToShopee(input: {
   if (!produto) {
     throw new Error("Produto não encontrado.");
   }
+  // Idempotência: se já foi publicado, não recriar (evita anúncio duplicado no
+  // marketplace). Para alterar, use o fluxo de edição do item.
+  if (produto.shopeeItemId) {
+    throw new Error(
+      `Produto já publicado na Shopee (item ${produto.shopeeItemId}). Edite o anúncio para atualizar.`,
+    );
+  }
 
   const account = await prisma.connectorAccount.findFirst({
     where: {

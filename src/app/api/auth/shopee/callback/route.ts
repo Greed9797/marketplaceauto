@@ -103,6 +103,24 @@ async function handleCallback(request: NextRequest) {
     tokenExpiresAt: new Date(Date.now() + token.expiresIn * 1000),
   });
 
+  // Reject if this shop is already linked to a DIFFERENT cliente in the same
+  // workspace: the upsert's unique key (workspace+provider+external) would
+  // otherwise silently reassign the connection and break the first cliente's
+  // publish/order-sync.
+  const existingShop = await prisma.connectorAccount.findUnique({
+    where: {
+      workspaceId_provider_externalAccountId: {
+        workspaceId,
+        provider: ConnectorProvider.SHOPEE,
+        externalAccountId,
+      },
+    },
+    select: { clienteId: true },
+  });
+  if (existingShop?.clienteId && existingShop.clienteId !== cliente.id) {
+    return redirectClientes(request, { error: "shop-ja-conectado" });
+  }
+
   const connectorAccount = await prisma.connectorAccount.upsert({
     where: {
       workspaceId_provider_externalAccountId: {

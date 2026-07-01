@@ -267,6 +267,13 @@ export async function publishProdutoToMl(input: {
   if (!produto) {
     throw new Error("Produto não encontrado.");
   }
+  // Idempotência: se já foi publicado, não recriar (evita anúncio duplicado).
+  // Para alterar, use o fluxo de edição do item.
+  if (produto.mlItemId) {
+    throw new Error(
+      `Produto já publicado no Mercado Livre (item ${produto.mlItemId}). Edite o anúncio para atualizar.`,
+    );
+  }
 
   const account = await prisma.connectorAccount.findFirst({
     where: {
