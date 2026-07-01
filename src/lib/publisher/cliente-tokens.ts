@@ -1,4 +1,9 @@
-import { encryptToken, encryptTokenEnvelope } from "@/lib/crypto/token-vault";
+import {
+  decryptToken,
+  decryptTokenEnvelope,
+  encryptToken,
+  encryptTokenEnvelope,
+} from "@/lib/crypto/token-vault";
 
 /**
  * Encrypted-token column shape shared with the `ClienteConnection` model. The
@@ -35,4 +40,31 @@ export function encryptClienteTokens(input: {
       ? encryptTokenEnvelope(input.refreshToken)
       : null,
   };
+}
+
+/**
+ * Decrypts the AES-256-GCM access token stored on a `ClienteConnection` back to
+ * plaintext. Mirrors the split-envelope shape written by `encryptClienteTokens`.
+ */
+export function decryptClienteAccessToken(input: ClienteTokenFields): string {
+  return decryptToken({
+    ciphertext: input.accessTokenCiphertext,
+    iv: input.tokenIv,
+    authTag: input.tokenAuthTag,
+    keyVersion: input.tokenKeyVersion,
+  });
+}
+
+/**
+ * Decrypts the self-contained refresh-token envelope, or returns null when the
+ * connection has no refresh token persisted.
+ */
+export function decryptClienteRefreshToken(
+  input: Pick<ClienteTokenFields, "refreshTokenCiphertext">,
+): string | null {
+  if (!input.refreshTokenCiphertext) {
+    return null;
+  }
+
+  return decryptTokenEnvelope(input.refreshTokenCiphertext);
 }

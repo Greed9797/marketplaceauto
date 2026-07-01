@@ -541,6 +541,7 @@ model Cliente {
   createdAt          DateTime            @default(now())
   updatedAt          DateTime            @updatedAt
   connections        ClienteConnection[]
+  produtos           Produto[]
 
   @@index([workspaceId])
 }
@@ -566,5 +567,56 @@ model ClienteConnection {
   updatedAt              DateTime          @updatedAt
 
   @@unique([clienteId, platform])
+  @@index([clienteId])
+}
+
+/// A product draft owned by a Cliente. Holds the marketplace-specific listing
+/// fields (titles, category ids, price/stock) plus the last publish payloads and
+/// the external item ids returned by Shopee / Mercado Livre after a successful
+/// `add_item` / `items.create`. `status` is a plain string state machine:
+/// rascunho | pendente | publicando | publicado | erro.
+model Produto {
+  id                String       @id @default(cuid())
+  clienteId         String
+  cliente           Cliente      @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  nomeOriginal      String
+  fotoUrl           String?
+  status            String       @default("rascunho")
+  tituloMl          String?
+  tituloShopee      String?
+  descricao         String?
+  categoriaMlId     String?
+  categoriaShopeeId Int?
+  preco             Decimal      @db.Decimal(14, 2)
+  quantidade        Int          @default(1)
+  condicao          String       @default("not_specified")
+  atributos         Json?
+  payloadMl         Json?
+  payloadShopee     Json?
+  mlItemId          String?
+  shopeeItemId      String?
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+  publicacoes       Publicacao[]
+
+  @@index([clienteId])
+}
+
+/// An audit row for a single publish attempt of a `Produto` on one platform.
+/// `respostaApi` stores the raw marketplace response (or error envelope) so the
+/// UI can show diagnostics and the retry endpoint can bump `tentativa`.
+model Publicacao {
+  id           String            @id @default(cuid())
+  produtoId    String
+  produto      Produto           @relation(fields: [produtoId], references: [id], onDelete: Cascade)
+  clienteId    String
+  plataforma   PublisherPlatform
+  status       String            @default("pendente")
+  respostaApi  Json?
+  erroMensagem String?
+  tentativa    Int               @default(1)
+  createdAt    DateTime          @default(now())
+
+  @@index([produtoId])
   @@index([clienteId])
 }

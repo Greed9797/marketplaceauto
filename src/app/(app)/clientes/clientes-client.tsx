@@ -44,7 +44,10 @@ export function NovoClienteForm() {
   }
 
   return (
-    <form className="flex flex-col gap-3 sm:flex-row sm:items-end" onSubmit={handleSubmit}>
+    <form
+      className="flex flex-col gap-3 sm:flex-row sm:items-end"
+      onSubmit={handleSubmit}
+    >
       <div className="flex-1">
         <Input
           disabled={isPending}

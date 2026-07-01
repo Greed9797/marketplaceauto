@@ -23,6 +23,12 @@ const rateLimitedRoutes = [
   "/api/clientes",
   "/api/connectors",
   "/api/webhooks",
+  "/api/produtos",
+  "/api/publicacoes",
+  "/api/shopee",
+  "/api/ml",
+  "/api/upload",
+  "/api/ai",
 ];
 
 function matchesRoute(pathname: string, route: string) {

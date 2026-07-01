@@ -23,8 +23,7 @@ function firstParam(value: string | string[] | undefined) {
 
 function connectedLabel(connected: string | undefined) {
   if (connected === "shopee") return "Conta Shopee conectada com sucesso.";
-  if (connected === "ml")
-    return "Conta Mercado Livre conectada com sucesso.";
+  if (connected === "ml") return "Conta Mercado Livre conectada com sucesso.";
   return null;
 }
 
@@ -32,8 +31,7 @@ const ERROR_MESSAGES: Record<string, string> = {
   "missing-cliente": "Selecione um cliente antes de conectar.",
   "cliente-not-found": "Cliente não encontrado neste workspace.",
   forbidden: "Você não tem permissão para conectar contas.",
-  "missing-shopee-config":
-    "Credenciais Shopee não configuradas no ambiente.",
+  "missing-shopee-config": "Credenciais Shopee não configuradas no ambiente.",
   "missing-ml-config":
     "Credenciais Mercado Livre não configuradas no ambiente.",
   "invalid-state": "Sessão de conexão expirada. Tente novamente.",
@@ -47,7 +45,9 @@ function errorMessage(error: string | undefined) {
   return ERROR_MESSAGES[error] ?? "Falha na conexão. Tente novamente.";
 }
 
-export default async function ClientesPage({ searchParams }: ClientesPageProps) {
+export default async function ClientesPage({
+  searchParams,
+}: ClientesPageProps) {
   const params = await searchParams;
   const context = await getCurrentUserContext();
   const canOperate = canOperateWorkspaceConnectors(
@@ -107,7 +107,10 @@ export default async function ClientesPage({ searchParams }: ClientesPageProps) 
         <Card>
           <CardContent>
             <div className="flex flex-col items-center gap-2 py-8 text-center">
-              <Users aria-hidden className="size-6 text-[var(--text-tertiary)]" />
+              <Users
+                aria-hidden
+                className="size-6 text-[var(--text-tertiary)]"
+              />
               <p className="text-sm text-[var(--text-secondary)]">
                 Nenhum cliente cadastrado ainda.
               </p>

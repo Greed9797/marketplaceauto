@@ -17,7 +17,10 @@ import { getShopeeEnvConfig } from "@/lib/publisher/shopee-env-config";
 
 export const runtime = "nodejs";
 
-function redirectClientes(request: NextRequest, params: Record<string, string>) {
+function redirectClientes(
+  request: NextRequest,
+  params: Record<string, string>,
+) {
   const url = new URL("/clientes", request.nextUrl.origin);
   for (const [key, value] of Object.entries(params)) {
     url.searchParams.set(key, value);
