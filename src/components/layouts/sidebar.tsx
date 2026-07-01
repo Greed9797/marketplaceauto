@@ -49,6 +49,12 @@ export function Sidebar({ context }: { context: AppContext }) {
     ...(canAddWorkspaceConnectors(context.user, context.currentMembership.role)
       ? [
           {
+            label: "Clientes",
+            href: "/clientes",
+            icon: "clientes" as const,
+            section: "manage" as const,
+          },
+          {
             label: "Conectores",
             href: "/connectors",
             icon: "connectors" as const,

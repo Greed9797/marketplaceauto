@@ -7,6 +7,7 @@ import {
   PanelsTopLeft,
   PlugZap,
   Settings,
+  Store,
   Timer,
   UserCircle,
   UsersRound,
@@ -26,6 +27,7 @@ import { useMobileNav } from "./mobile-nav-context";
 export type SidebarIconKey =
   | "dashboard"
   | "brands"
+  | "clientes"
   | "users"
   | "connectors"
   | "profile"
@@ -58,6 +60,7 @@ type SidebarClientProps = {
 const iconMap: Record<SidebarIconKey, LucideIcon> = {
   dashboard: LayoutDashboard,
   brands: PanelsTopLeft,
+  clientes: Store,
   users: UsersRound,
   connectors: PlugZap,
   profile: UserCircle,

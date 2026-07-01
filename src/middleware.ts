@@ -5,6 +5,7 @@ import { rateLimitMiddleware } from "@/lib/security/rate-limit";
 const protectedRoutes = [
   "/dashboard",
   "/dashboards",
+  "/clientes",
   "/connectors",
   "/workspace",
   "/profile",
@@ -19,6 +20,7 @@ const rateLimitedRoutes = [
   "/forgot-password",
   "/reset-password",
   "/api/auth",
+  "/api/clientes",
   "/api/connectors",
   "/api/webhooks",
 ];

@@ -101,6 +101,7 @@ model Workspace {
   syncJobs                 SyncJob[]
   syncState                WorkspaceSyncState?
   accountReviewSessions    AccountReviewSession[]
+  clientes                 Cliente[]
 }
 
 model WorkspaceSyncState {
@@ -513,4 +514,57 @@ enum SyncType {
   INCREMENTAL
   TOKEN_REFRESH
   MANUAL
+}
+
+/// Marketplace platforms handled by the publisher flow. Kept separate from
+/// `ConnectorProvider` because the publisher connects marketplace accounts PER
+/// CLIENTE (a managed brand), not per workspace connector.
+enum PublisherPlatform {
+  SHOPEE
+  MERCADO_LIVRE
+}
+
+/// A brand/account managed by the publisher inside a workspace. Marketplace
+/// OAuth connections (Shopee / Mercado Livre) attach to a Cliente so a single
+/// workspace can publish on behalf of many clients.
+model Cliente {
+  id                 String              @id @default(cuid())
+  workspaceId        String
+  workspace          Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  nome               String
+  nicho              String?
+  estiloDescricao    String?
+  exemplosTitulos    String?
+  exemplosDescricoes String?
+  dadosFiscais       String?
+  ativo              Boolean             @default(true)
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  connections        ClienteConnection[]
+
+  @@index([workspaceId])
+}
+
+/// A marketplace OAuth connection owned by a Cliente. Tokens are stored
+/// AES-256-GCM encrypted with the same envelope shape as `ConnectorAccount`
+/// (accessTokenCiphertext + tokenIv + tokenAuthTag + tokenKeyVersion), keyed by
+/// `TOKEN_ENCRYPTION_KEY`. `externalId` holds the marketplace account id
+/// (Shopee shop_id / Mercado Livre user_id).
+model ClienteConnection {
+  id                     String            @id @default(cuid())
+  clienteId              String
+  cliente                Cliente           @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  platform               PublisherPlatform
+  accessTokenCiphertext  String
+  refreshTokenCiphertext String?
+  tokenIv                String
+  tokenAuthTag           String
+  tokenKeyVersion        String            @default("v1")
+  externalId             String
+  expiresAt              DateTime?
+  createdAt              DateTime          @default(now())
+  updatedAt              DateTime          @updatedAt
+
+  @@unique([clienteId, platform])
+  @@index([clienteId])
 }

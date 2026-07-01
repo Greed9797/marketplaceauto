@@ -85,7 +85,9 @@ describe("dashboard period", () => {
     expect(filters.commerceProviders).not.toContain(
       ConnectorProvider.NUVEMSHOP,
     );
-    expect(filters.commerceProviders).toEqual([ConnectorProvider.MERCADO_LIVRE]);
+    expect(filters.commerceProviders).toEqual([
+      ConnectorProvider.MERCADO_LIVRE,
+    ]);
     // No paid-traffic/ad sources surface in the dashboard.
     expect(filters.trafficProviders).toEqual([]);
   });
