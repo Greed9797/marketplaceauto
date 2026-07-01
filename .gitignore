@@ -20,3 +20,7 @@ supabase/.temp/
 # dev artifacts
 .playwright-mcp/
 /w3marketplace-connectors-authed.png
+
+# generated/dev artifacts
+graphify-out/
+w3marketplace-*.png
