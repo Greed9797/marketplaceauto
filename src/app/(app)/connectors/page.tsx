@@ -28,6 +28,7 @@ import {
 } from "@/lib/connectors/marketplace-first";
 import { getGlobalMercadoLivreConfig } from "@/lib/connectors/mercado-livre/global-config";
 import { getGlobalShopeeConfig } from "@/lib/connectors/shopee/global-config";
+import { getMlEnvConfig } from "@/lib/publisher/ml-env-config";
 import { listPublicProviderConfigs } from "@/lib/connectors/provider-config";
 import {
   getConnectorDefinition,
@@ -273,12 +274,25 @@ export default async function ConnectorsPage({
   // o connect flow usa esse fallback quando o workspace não tem ProviderConfig,
   // então o card deve oferecer "Conectar" direto em vez de forçar o formulário.
   const appOrigin = await resolveAppOrigin();
-  if (getGlobalMercadoLivreConfig(appOrigin)) {
+  const hasMlConnectorConfig =
+    providerConfigs.has(ConnectorProvider.MERCADO_LIVRE) ||
+    Boolean(getGlobalMercadoLivreConfig(appOrigin));
+  if (hasMlConnectorConfig) {
     providerConfigs.add(ConnectorProvider.MERCADO_LIVRE);
   }
   if (getGlobalShopeeConfig(appOrigin)) {
     providerConfigs.add(ConnectorProvider.SHOPEE);
   }
+  // App ML do publisher (ML_APP_ID/ML_SECRET, redirect /api/auth/ml/callback já
+  // registrado no painel do ML) também conecta o workspace — o callback cria a
+  // mesma ConnectorAccount. Sem config do conector, o card usa esse fluxo.
+  const useMlPublisherFlow = !hasMlConnectorConfig && Boolean(getMlEnvConfig());
+  if (useMlPublisherFlow) {
+    providerConfigs.add(ConnectorProvider.MERCADO_LIVRE);
+  }
+  const mlConnectHref = useMlPublisherFlow
+    ? "/api/auth/ml"
+    : "/api/connectors/mercado-livre/connect";
 
   const metaAccounts = connectorCounts.get(ConnectorProvider.META_ADS) ?? 0;
   const googleAdsAccounts =
@@ -477,7 +491,7 @@ export default async function ConnectorsPage({
       action: connectorAction(
         ConnectorProvider.MERCADO_LIVRE,
         <Button asChild size="sm">
-          <a href="/api/connectors/mercado-livre/connect">
+          <a href={mlConnectHref}>
             <Cable size={16} aria-hidden="true" />
             Conectar Mercado Livre
           </a>

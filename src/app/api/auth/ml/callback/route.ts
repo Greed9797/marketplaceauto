@@ -20,11 +20,15 @@ import {
 
 export const runtime = "nodejs";
 
-function redirectClientes(
+function redirectAfter(
   request: NextRequest,
+  hasCliente: boolean,
   params: Record<string, string>,
 ) {
-  const url = new URL("/clientes", request.nextUrl.origin);
+  // Fluxo por-cliente volta pra /clientes; fluxo do workspace (card de
+  // Conectores, sem cookie de cliente) volta pra /connectors.
+  const url = new URL(hasCliente ? "/clientes" : "/connectors", request.nextUrl.origin);
+  if (!hasCliente) url.searchParams.set("provider", "mercado_livre");
   for (const [key, value] of Object.entries(params)) {
     url.searchParams.set(key, value);
   }
@@ -41,52 +45,56 @@ export async function GET(request: NextRequest) {
     if (isNextControlFlowError(error)) throw error;
     const message = error instanceof Error ? error.message : "unknown";
     console.error(`[auth/ml/callback] failed: ${message}`);
-    return redirectClientes(request, { error: "oauth-failed" });
+    const hasCliente = Boolean(request.cookies.get(ML_CLIENTE_COOKIE)?.value);
+    return redirectAfter(request, hasCliente, { error: "oauth-failed" });
   }
 }
 
 async function handleCallback(request: NextRequest) {
   const code = request.nextUrl.searchParams.get("code");
   const state = request.nextUrl.searchParams.get("state");
+  // Cookie de cliente é OPCIONAL: presente = conexão vinculada ao Cliente
+  // (fluxo do publisher); ausente = conexão do workspace (card de Conectores).
   const clienteId = request.cookies.get(ML_CLIENTE_COOKIE)?.value;
+  const hasCliente = Boolean(clienteId);
   const stateCookie = request.cookies.get(ML_STATE_COOKIE)?.value;
 
-  if (!clienteId) {
-    return redirectClientes(request, { error: "missing-cliente" });
-  }
   if (!state || !stateCookie || state !== stateCookie) {
-    return redirectClientes(request, { error: "invalid-state" });
+    return redirectAfter(request, hasCliente, { error: "invalid-state" });
   }
   if (!code) {
-    return redirectClientes(request, { error: "missing-code" });
+    return redirectAfter(request, hasCliente, { error: "missing-code" });
   }
 
   const context = await getCurrentUserContext();
   if (
     !canOperateWorkspaceConnectors(context.user, context.currentMembership.role)
   ) {
-    return redirectClientes(request, { error: "forbidden" });
+    return redirectAfter(request, hasCliente, { error: "forbidden" });
   }
 
   const workspaceId = context.currentWorkspace.id;
-  const cliente = await resolveClienteForWorkspace({
-    clienteId,
-    workspaceId,
-  });
-  if (!cliente) {
-    return redirectClientes(request, { error: "cliente-not-found" });
+  let cliente: Awaited<ReturnType<typeof resolveClienteForWorkspace>> = null;
+  if (clienteId) {
+    cliente = await resolveClienteForWorkspace({
+      clienteId,
+      workspaceId,
+    });
+    if (!cliente) {
+      return redirectAfter(request, hasCliente, { error: "cliente-not-found" });
+    }
   }
 
   const config = getMlEnvConfig();
   if (!config) {
-    return redirectClientes(request, { error: "missing-ml-config" });
+    return redirectAfter(request, hasCliente, { error: "missing-ml-config" });
   }
 
   const client = new MercadoLivreClient({ config });
   const token = await client.exchangeCodeForAccessToken(code);
   const sellerId = token.userId;
   if (!sellerId) {
-    return redirectClientes(request, { error: "oauth-failed" });
+    return redirectAfter(request, hasCliente, { error: "oauth-failed" });
   }
 
   // Single source of truth: the publisher OAuth connection now lives on the
@@ -114,8 +122,12 @@ async function handleCallback(request: NextRequest) {
     },
     select: { clienteId: true },
   });
-  if (existingSeller?.clienteId && existingSeller.clienteId !== cliente.id) {
-    return redirectClientes(request, { error: "shop-ja-conectado" });
+  if (
+    cliente &&
+    existingSeller?.clienteId &&
+    existingSeller.clienteId !== cliente.id
+  ) {
+    return redirectAfter(request, hasCliente, { error: "shop-ja-conectado" });
   }
 
   const connectorAccount = await prisma.connectorAccount.upsert({
@@ -127,8 +139,14 @@ async function handleCallback(request: NextRequest) {
       },
     },
     update: {
-      clienteId: cliente.id,
-      accountName: `${cliente.nome} — Mercado Livre`,
+      // Sem cliente (conexão de workspace) preserva um vínculo/nome existente —
+      // reconectar pelo card não pode desassociar o Cliente do publisher.
+      ...(cliente
+        ? {
+            clienteId: cliente.id,
+            accountName: `${cliente.nome} — Mercado Livre`,
+          }
+        : {}),
       status: ConnectorStatus.ACTIVE,
       ...credentialFields,
       metadata: { scope: token.scope },
@@ -136,10 +154,12 @@ async function handleCallback(request: NextRequest) {
     },
     create: {
       workspaceId,
-      clienteId: cliente.id,
+      clienteId: cliente?.id ?? null,
       provider: ConnectorProvider.MERCADO_LIVRE,
       externalAccountId: sellerId,
-      accountName: `${cliente.nome} — Mercado Livre`,
+      accountName: cliente
+        ? `${cliente.nome} — Mercado Livre`
+        : `Mercado Livre ${sellerId}`,
       status: ConnectorStatus.ACTIVE,
       ...credentialFields,
       metadata: { scope: token.scope },
@@ -156,5 +176,5 @@ async function handleCallback(request: NextRequest) {
     );
   }
 
-  return redirectClientes(request, { connected: "ml" });
+  return redirectAfter(request, hasCliente, { connected: "ml" });
 }
