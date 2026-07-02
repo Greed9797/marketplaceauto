@@ -1,3 +1,4 @@
+import type { InventoryRow } from "@/lib/connectors/inventory";
 import { callWithRetry } from "@/lib/connectors/retry";
 import type { ShopifyOrder } from "@/lib/connectors/shopify/client";
 import { redirectSafeFetch } from "@/lib/connectors/url-guard";
@@ -49,6 +50,11 @@ type MercadoLivreOrderItem = {
   unit_price?: number | string | null;
 };
 
+type MercadoLivreStatePayload = {
+  id?: string | null; // "BR-SC"
+  name?: string | null; // "Santa Catarina"
+} | null;
+
 type MercadoLivreOrderPayload = {
   id?: string | number;
   status?: string | null;
@@ -60,6 +66,13 @@ type MercadoLivreOrderPayload = {
   buyer?: { email?: string | null } | null;
   payments?: MercadoLivrePayment[] | null;
   order_items?: MercadoLivreOrderItem[] | null;
+  // No JSON atual de orders, shipping traz SÓ o id — o endereço vive em
+  // GET /shipments/{id}. receiver_address embutido é o formato legado; quando
+  // presente, é usado como fast-path pra evitar a chamada extra.
+  shipping?: {
+    id?: string | number | null;
+    receiver_address?: { state?: MercadoLivreStatePayload } | null;
+  } | null;
 };
 
 type MercadoLivreOrdersResponse = {
@@ -201,7 +214,24 @@ export function normalizeMercadoLivreOrder(
       order.date_closed,
       order.date_approved,
     ),
+    // Fast-path do formato legado; o formato atual exige /shipments/{id}
+    // (enriquecido depois em listOrders).
+    shippingState: stateLabel(order.shipping?.receiver_address?.state),
   };
+}
+
+/**
+ * Nome exibível do estado ("Santa Catarina"), com fallback pra sigla derivada
+ * do id ISO ("BR-SC" → "SC"). Nome primeiro: os demais conectores gravam nome
+ * por extenso e o widget de vendas-por-estado agrupa por string.
+ */
+function stateLabel(state: MercadoLivreStatePayload | undefined): string | null {
+  if (!state) return null;
+  const name = state.name?.trim();
+  if (name) return name;
+  const id = state.id?.trim();
+  if (!id) return null;
+  return id.includes("-") ? id.split("-").pop() || null : id;
 }
 
 export class MercadoLivreClient {
@@ -395,6 +425,10 @@ export class MercadoLivreClient {
 
       const results = response.results ?? [];
       const pageOrders = results.map(normalizeMercadoLivreOrder);
+      // O JSON atual de orders não embute endereço: estado do comprador exige
+      // GET /shipments/{shipping.id}. Best-effort (falha → null) e por página,
+      // pra planilha de vendas-por-estado do dashboard.
+      await this.enrichShippingStates(results, pageOrders, input.accessToken);
       if (onPage) {
         if (pageOrders.length > 0) {
           await onPage(pageOrders);
@@ -424,4 +458,217 @@ export class MercadoLivreClient {
     // Hit the MAX_PAGES safety cap without exhausting the window.
     return { orders: out, complete: false, nextOffset: offset };
   }
+
+  /**
+   * Preenche shippingState dos pedidos da página via GET /shipments/{id}
+   * (header x-format-new). Concorrência baixa e best-effort: estado é
+   * enriquecimento de dashboard — uma falha nunca derruba o sync de receita.
+   */
+  private async enrichShippingStates(
+    payloads: MercadoLivreOrderPayload[],
+    orders: ShopifyOrder[],
+    accessToken: string,
+  ): Promise<void> {
+    const pending: Array<{ index: number; shipmentId: string }> = [];
+    for (let index = 0; index < orders.length; index += 1) {
+      const shipmentId = payloads[index]?.shipping?.id;
+      if (
+        !orders[index].shippingState &&
+        shipmentId !== undefined &&
+        shipmentId !== null
+      ) {
+        pending.push({ index, shipmentId: String(shipmentId) });
+      }
+    }
+    for (const batch of chunkArray(pending, SHIPMENT_LOOKUP_CONCURRENCY)) {
+      await Promise.all(
+        batch.map(async ({ index, shipmentId }) => {
+          orders[index].shippingState = await this.fetchShipmentState({
+            shipmentId,
+            accessToken,
+          });
+        }),
+      );
+    }
+  }
+
+  /** Estado do destinatário de um shipment, ou null (nunca lança). */
+  async fetchShipmentState(input: {
+    shipmentId: string;
+    accessToken: string;
+  }): Promise<string | null> {
+    try {
+      const response = await callWithRetry(() =>
+        fetchJson<MercadoLivreShipmentResponse>(
+          new URL(`${this.apiBaseUrl}/shipments/${input.shipmentId}`),
+          this.fetchImpl,
+          {
+            headers: {
+              Authorization: `Bearer ${input.accessToken}`,
+              // Formato novo: endereço em destination.shipping_address.
+              "x-format-new": "true",
+            },
+            signal: AbortSignal.timeout(15_000),
+          },
+        ),
+      );
+      return (
+        stateLabel(response.destination?.shipping_address?.state) ??
+        stateLabel(response.receiver_address?.state)
+      );
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Catálogo do seller → InventoryRow[] (estoque + categoria). IDs via
+   * /users/{id}/items/search em modo scan (scroll_id, funciona pra qualquer
+   * volume; expira em 5min então o loop consome direto), detalhe via multiget
+   * /items?ids= (máx 20, available_quantity REAL só com o token do seller),
+   * nome da categoria via /categories/{id} (público, cacheado por execução).
+   */
+  async listInventory(input: {
+    sellerId: string;
+    accessToken: string;
+  }): Promise<InventoryRow[]> {
+    const itemIds: string[] = [];
+    let scrollId: string | null = null;
+    for (let page = 0; page < ML_INVENTORY_MAX_PAGES; page += 1) {
+      const url = new URL(
+        `${this.apiBaseUrl}/users/${encodeURIComponent(input.sellerId)}/items/search`,
+      );
+      url.searchParams.set("search_type", "scan");
+      url.searchParams.set("limit", "100");
+      if (scrollId) url.searchParams.set("scroll_id", scrollId);
+
+      const response = await callWithRetry(() =>
+        fetchJson<MercadoLivreItemsSearchResponse>(url, this.fetchImpl, {
+          headers: { Authorization: `Bearer ${input.accessToken}` },
+          signal: AbortSignal.timeout(15_000),
+        }),
+      );
+      const ids = (response.results ?? []).filter(
+        (id): id is string => typeof id === "string" && id.length > 0,
+      );
+      itemIds.push(...ids);
+      if (ids.length === 0 || !response.scroll_id) break;
+      scrollId = response.scroll_id;
+    }
+
+    if (itemIds.length === 0) return [];
+
+    const categoryCache = new Map<string, string | null>();
+    const rows: InventoryRow[] = [];
+    for (const batch of chunkArray(itemIds, ML_ITEMS_MULTIGET_SIZE)) {
+      const url = new URL(`${this.apiBaseUrl}/items`);
+      url.searchParams.set("ids", batch.join(","));
+      url.searchParams.set(
+        "attributes",
+        "id,title,available_quantity,category_id,status,seller_custom_field",
+      );
+      const response = await callWithRetry(() =>
+        fetchJson<MercadoLivreItemsMultigetResponse>(url, this.fetchImpl, {
+          headers: { Authorization: `Bearer ${input.accessToken}` },
+          signal: AbortSignal.timeout(15_000),
+        }),
+      );
+      for (const entry of response ?? []) {
+        // Multiget é "verbose": cada elemento tem seu próprio HTTP code
+        // (item deletado = 404 no elemento, não na chamada).
+        if (entry?.code !== 200 || !entry.body) continue;
+        const row = normalizeMercadoLivreInventoryItem(entry.body);
+        if (!row) continue;
+        row.categoryName = await this.resolveCategoryName(
+          entry.body.category_id ?? null,
+          categoryCache,
+        );
+        rows.push(row);
+      }
+      await sleep(MERCADO_LIVRE_PAGE_THROTTLE_MS);
+    }
+
+    return rows;
+  }
+
+  /** /categories/{id} é público e estável — cache por execução. */
+  private async resolveCategoryName(
+    categoryId: string | null,
+    cache: Map<string, string | null>,
+  ): Promise<string | null> {
+    if (!categoryId) return null;
+    if (cache.has(categoryId)) return cache.get(categoryId) ?? null;
+    let name: string | null = null;
+    try {
+      const response = await callWithRetry(() =>
+        fetchJson<{ name?: string | null }>(
+          new URL(`${this.apiBaseUrl}/categories/${categoryId}`),
+          this.fetchImpl,
+          { signal: AbortSignal.timeout(15_000) },
+        ),
+      );
+      name = response.name?.trim() || null;
+    } catch {
+      name = null; // categoria é enriquecimento, nunca derruba o inventário
+    }
+    cache.set(categoryId, name);
+    return name;
+  }
+}
+
+const SHIPMENT_LOOKUP_CONCURRENCY = 4;
+const ML_ITEMS_MULTIGET_SIZE = 20;
+// 2000 páginas × 100 ids = 200k itens — backstop de runaway, não limite real.
+const ML_INVENTORY_MAX_PAGES = 2000;
+
+function chunkArray<T>(items: T[], size: number): T[][] {
+  const result: T[][] = [];
+  for (let index = 0; index < items.length; index += size) {
+    result.push(items.slice(index, index + size));
+  }
+  return result;
+}
+
+type MercadoLivreShipmentResponse = {
+  destination?: {
+    shipping_address?: { state?: MercadoLivreStatePayload } | null;
+  } | null;
+  // Formato legado (sem x-format-new) — equivalente documentado.
+  receiver_address?: { state?: MercadoLivreStatePayload } | null;
+};
+
+type MercadoLivreItemsSearchResponse = {
+  results?: Array<string | null> | null;
+  scroll_id?: string | null;
+};
+
+type MercadoLivreItemBodyPayload = {
+  id?: string | number | null;
+  title?: string | null;
+  available_quantity?: number | string | null;
+  category_id?: string | null;
+  status?: string | null;
+  seller_custom_field?: string | null;
+};
+
+type MercadoLivreItemsMultigetResponse = Array<{
+  code?: number | null;
+  body?: MercadoLivreItemBodyPayload | null;
+} | null> | null;
+
+/** Item do multiget /items → InventoryRow (puro, testável; categoria à parte). */
+export function normalizeMercadoLivreInventoryItem(
+  body: MercadoLivreItemBodyPayload | null,
+): InventoryRow | null {
+  if (!body || body.id === undefined || body.id === null) return null;
+  // Anúncio encerrado não é estoque vendável — fora do catálogo.
+  if (body.status === "closed") return null;
+  const quantity = Number(body.available_quantity);
+  return {
+    externalProductId: String(body.id),
+    sku: body.seller_custom_field?.trim() || null,
+    productName: body.title?.trim() || `Item ${body.id}`,
+    categoryName: null,
+    quantity: Number.isFinite(quantity) ? quantity : null,
+  };
 }

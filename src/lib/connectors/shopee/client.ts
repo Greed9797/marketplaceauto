@@ -1,3 +1,4 @@
+import type { InventoryRow } from "@/lib/connectors/inventory";
 import { callWithRetry } from "@/lib/connectors/retry";
 import type { ShopifyOrder } from "@/lib/connectors/shopify/client";
 import { redirectSafeFetch } from "@/lib/connectors/url-guard";
@@ -66,6 +67,13 @@ type ShopeeOrderPayload = {
   create_time?: number | string | null;
   pay_time?: number | string | null;
   item_list?: ShopeeOrderItemPayload[] | null;
+  // Vem apenas quando "recipient_address" está em response_optional_fields.
+  // `state` é o estado/província do comprador; `region` é o PAÍS ("BR").
+  recipient_address?: {
+    state?: string | null;
+    city?: string | null;
+    region?: string | null;
+  } | null;
 };
 
 type ShopeeOrderDetailResponse = ShopeeErrorEnvelope & {
@@ -89,7 +97,7 @@ const SHOPEE_PAID_STATUSES = new Set<string>([
 ]);
 
 export const SHOPEE_ORDER_DETAIL_OPTIONAL_FIELDS =
-  "total_amount,buyer_total_amount,escrow_amount,create_time,pay_time,order_status,item_list,currency";
+  "total_amount,buyer_total_amount,escrow_amount,create_time,pay_time,order_status,item_list,currency,recipient_address";
 
 export class ShopeeApiError extends Error {
   status: number;
@@ -244,6 +252,7 @@ export function normalizeShopeeOrder(order: ShopeeOrderPayload): ShopifyOrder {
     items,
     status,
     placedAt: isoFromUnixSeconds(order.create_time, order.pay_time),
+    shippingState: order.recipient_address?.state?.trim() || null,
   };
 }
 
@@ -544,4 +553,152 @@ export class ShopeeClient {
 
     return { orders: out, complete: true, nextWindowIndex: windows.length };
   }
+
+  /**
+   * Catálogo completo da loja → InventoryRow[] (estoque + categoria pro
+   * dashboard). get_item_list pagina os ids (has_next_page/next_offset),
+   * get_item_base_info detalha em lotes de 50 (o array de ids casa com o
+   * page_size), e get_category (1 chamada, árvore inteira) resolve o nome.
+   */
+  async listInventory(input: {
+    shopId: number;
+    accessToken: string;
+  }): Promise<InventoryRow[]> {
+    const itemIds: number[] = [];
+    let offset = 0;
+    for (let page = 0; page < SHOPEE_MAX_PAGES_PER_WINDOW; page += 1) {
+      const response = await this.shopGet<ShopeeItemListResponse>({
+        apiPath: "/api/v2/product/get_item_list",
+        params: {
+          offset,
+          page_size: SHOPEE_ITEM_BATCH_SIZE,
+          item_status: "NORMAL",
+        },
+        accessToken: input.accessToken,
+        shopId: input.shopId,
+      });
+      // ATENÇÃO de shape: o array chama-se `item` (não item_list).
+      for (const item of response.response?.item ?? []) {
+        if (item?.item_id !== undefined && item.item_id !== null) {
+          itemIds.push(Number(item.item_id));
+        }
+      }
+      if (!response.response?.has_next_page) break;
+      const next = Number(response.response?.next_offset);
+      if (!Number.isFinite(next) || next <= offset) break; // anti-loop
+      offset = next;
+      await sleep(SHOPEE_REQUEST_THROTTLE_MS);
+    }
+
+    if (itemIds.length === 0) return [];
+
+    const categoryNames = await this.fetchCategoryNames(input);
+
+    const rows: InventoryRow[] = [];
+    for (const batch of chunks(itemIds, SHOPEE_ITEM_BATCH_SIZE)) {
+      const response = await this.shopGet<ShopeeItemBaseInfoResponse>({
+        apiPath: "/api/v2/product/get_item_base_info",
+        params: { item_id_list: batch.join(",") },
+        accessToken: input.accessToken,
+        shopId: input.shopId,
+      });
+      for (const item of response.response?.item_list ?? []) {
+        const row = normalizeShopeeInventoryItem(item, categoryNames);
+        if (row) rows.push(row);
+      }
+      await sleep(SHOPEE_REQUEST_THROTTLE_MS);
+    }
+
+    return rows;
+  }
+
+  /** Árvore inteira de categorias em 1 chamada → mapa id → nome exibível. */
+  private async fetchCategoryNames(input: {
+    shopId: number;
+    accessToken: string;
+  }): Promise<Map<number, string>> {
+    const names = new Map<number, string>();
+    try {
+      const response = await this.shopGet<ShopeeCategoryResponse>({
+        apiPath: "/api/v2/product/get_category",
+        params: {},
+        accessToken: input.accessToken,
+        shopId: input.shopId,
+      });
+      for (const category of response.response?.category_list ?? []) {
+        const id = Number(category?.category_id);
+        const name =
+          category?.display_category_name?.trim() ||
+          category?.original_category_name?.trim();
+        if (Number.isFinite(id) && name) names.set(id, name);
+      }
+    } catch (error: unknown) {
+      // Categoria é enriquecimento: sem ela o estoque ainda vale.
+      const message = error instanceof Error ? error.message : "unknown";
+      console.warn(`[shopee] get_category falhou: ${message}`);
+    }
+    return names;
+  }
+}
+
+const SHOPEE_ITEM_BATCH_SIZE = 50;
+
+type ShopeeItemListResponse = ShopeeErrorEnvelope & {
+  response?: {
+    item?: Array<{ item_id?: number | string | null } | null> | null;
+    has_next_page?: boolean | null;
+    next_offset?: number | string | null;
+  };
+};
+
+type ShopeeItemBaseInfoPayload = {
+  item_id?: number | string | null;
+  item_name?: string | null;
+  item_sku?: string | null;
+  category_id?: number | string | null;
+  item_status?: string | null;
+  stock_info_v2?: {
+    summary_info?: {
+      total_available_stock?: number | string | null;
+    } | null;
+  } | null;
+};
+
+type ShopeeItemBaseInfoResponse = ShopeeErrorEnvelope & {
+  response?: {
+    item_list?: Array<ShopeeItemBaseInfoPayload | null> | null;
+  };
+};
+
+type ShopeeCategoryResponse = ShopeeErrorEnvelope & {
+  response?: {
+    category_list?: Array<{
+      category_id?: number | string | null;
+      original_category_name?: string | null;
+      display_category_name?: string | null;
+    } | null> | null;
+  };
+};
+
+/** Item do get_item_base_info → InventoryRow (puro, testável). */
+export function normalizeShopeeInventoryItem(
+  item: ShopeeItemBaseInfoPayload | null,
+  categoryNames: Map<number, string>,
+): InventoryRow | null {
+  if (!item || item.item_id === undefined || item.item_id === null) {
+    return null;
+  }
+  const stock = Number(
+    item.stock_info_v2?.summary_info?.total_available_stock,
+  );
+  const categoryId = Number(item.category_id);
+  return {
+    externalProductId: String(item.item_id),
+    sku: item.item_sku?.trim() || null,
+    productName: item.item_name?.trim() || `Item ${item.item_id}`,
+    categoryName: Number.isFinite(categoryId)
+      ? (categoryNames.get(categoryId) ?? null)
+      : null,
+    quantity: Number.isFinite(stock) ? stock : null,
+  };
 }

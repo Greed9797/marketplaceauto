@@ -27,7 +27,10 @@ function redirectAfter(
 ) {
   // Fluxo por-cliente volta pra /clientes; fluxo do workspace (card de
   // Conectores, sem cookie de cliente) volta pra /connectors.
-  const url = new URL(hasCliente ? "/clientes" : "/connectors", request.nextUrl.origin);
+  const url = new URL(
+    hasCliente ? "/clientes" : "/connectors",
+    request.nextUrl.origin,
+  );
   if (!hasCliente) url.searchParams.set("provider", "mercado_livre");
   for (const [key, value] of Object.entries(params)) {
     url.searchParams.set(key, value);

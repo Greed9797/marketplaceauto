@@ -3,12 +3,16 @@ import { ConnectorProvider, ConnectorStatus } from "@prisma/client";
 import { connectorCredentialsFromAccountVaultAware } from "@/lib/connectors/credentials";
 import type { InventoryRow } from "@/lib/connectors/inventory";
 import { ManualCommerceClient } from "@/lib/connectors/manual-commerce-client";
+import { MercadoLivreClient } from "@/lib/connectors/mercado-livre/client";
 import { NuvemshopClient } from "@/lib/connectors/nuvemshop/client";
 import {
   buildNuvemshopConfigFromProviderConfig,
+  buildShopeeConfigFromProviderConfig,
   buildShopifyConfigFromProviderConfig,
   getActiveProviderConfig,
 } from "@/lib/connectors/provider-config";
+import { ShopeeClient } from "@/lib/connectors/shopee/client";
+import { getGlobalShopeeConfig } from "@/lib/connectors/shopee/global-config";
 import { ShopifyClient } from "@/lib/connectors/shopify/client";
 import { prisma } from "@/lib/db/prisma";
 
@@ -26,6 +30,8 @@ const INVENTORY_PROVIDERS = new Set<ConnectorProvider>([
   ConnectorProvider.WBUY,
   ConnectorProvider.MAGAZORD,
   ConnectorProvider.TRAY,
+  ConnectorProvider.MERCADO_LIVRE,
+  ConnectorProvider.SHOPEE,
 ]);
 
 export function supportsInventory(provider: ConnectorProvider): boolean {
@@ -122,6 +128,36 @@ export async function syncConnectorInventory(input: {
       shop: connector.externalAccountId,
       accessToken,
     });
+  } else if (connector.provider === ConnectorProvider.MERCADO_LIVRE) {
+    if (!accessToken || !connector.externalAccountId) {
+      return { count: 0 };
+    }
+    // Listagem/estoque só precisam do token do seller (available_quantity real
+    // exige o token do próprio seller — sem token viria por faixas).
+    const client = new MercadoLivreClient({});
+    rows = await client.listInventory({
+      sellerId: connector.externalAccountId,
+      accessToken,
+    });
+  } else if (connector.provider === ConnectorProvider.SHOPEE) {
+    const shopId = Number(connector.externalAccountId);
+    if (!accessToken || !Number.isFinite(shopId) || shopId <= 0) {
+      return { count: 0 };
+    }
+    // Toda chamada shop-level é assinada com as credenciais do partner app —
+    // ProviderConfig do workspace primeiro, env "app W3" como fallback.
+    const providerConfig = await getActiveProviderConfig({
+      workspaceId: connector.workspaceId,
+      provider: ConnectorProvider.SHOPEE,
+    });
+    const config = providerConfig
+      ? await buildShopeeConfigFromProviderConfig(providerConfig)
+      : getGlobalShopeeConfig(process.env.NEXTAUTH_URL?.trim() ?? "");
+    if (!config) {
+      return { count: 0 };
+    }
+    const client = new ShopeeClient({ config });
+    rows = await client.listInventory({ shopId, accessToken });
   } else {
     // Manual providers (Loja Integrada, WBuy, Magazord, Tray).
     const client = new ManualCommerceClient({
