@@ -593,6 +593,64 @@ export class MercadoLivreClient {
     return rows;
   }
 
+  /**
+   * Visitas diárias do seller via /users/{id}/items_visits/time_window
+   * (unit=day). Retorna [{ date: 'YYYY-MM-DD', total }] — um item por dia da
+   * janela. Cap de 150 dias por chamada (limite do endpoint); janelas maiores
+   * paginam movendo `ending` pra trás. Datas do ML vêm ISO com offset do site
+   * (MLB/Brasil) → fatiar os 10 primeiros chars pra virar a DATE do banco.
+   */
+  async fetchDailyVisits(input: {
+    sellerId: string;
+    accessToken: string;
+    /** Data final da amostra (YYYY-MM-DD); default hoje no lado do ML. */
+    endingDate: string;
+    /** Nº de dias a voltar a partir de endingDate (será limitado a 150). */
+    lastDays: number;
+  }): Promise<Array<{ date: string; total: number }>> {
+    const out = new Map<string, number>();
+    const MAX_WINDOW = 150;
+    let remaining = Math.max(1, Math.trunc(input.lastDays));
+    let ending = input.endingDate.slice(0, 10);
+
+    // Paginar janelas de ≤150 dias movendo `ending` pra trás.
+    for (let guard = 0; guard < 40 && remaining > 0; guard += 1) {
+      const windowDays = Math.min(MAX_WINDOW, remaining);
+      const url = new URL(
+        `${this.apiBaseUrl}/users/${encodeURIComponent(input.sellerId)}/items_visits/time_window`,
+      );
+      url.searchParams.set("last", String(windowDays));
+      url.searchParams.set("unit", "day");
+      url.searchParams.set("ending", ending);
+
+      const response = await callWithRetry(() =>
+        fetchJson<MercadoLivreVisitsResponse>(url, this.fetchImpl, {
+          headers: { Authorization: `Bearer ${input.accessToken}` },
+          signal: AbortSignal.timeout(15_000),
+        }),
+      );
+
+      let earliest: string | null = null;
+      for (const entry of response.results ?? []) {
+        const day = entry?.date?.slice(0, 10);
+        if (!day) continue;
+        const total = Number(entry?.total);
+        out.set(day, Number.isFinite(total) ? total : 0);
+        if (!earliest || day < earliest) earliest = day;
+      }
+      if (!earliest) break; // sem dados → nada mais a paginar
+
+      remaining -= windowDays;
+      // Próxima janela termina no dia anterior ao mais antigo já coletado.
+      const prev = new Date(`${earliest}T00:00:00.000Z`);
+      prev.setUTCDate(prev.getUTCDate() - 1);
+      ending = prev.toISOString().slice(0, 10);
+      await sleep(MERCADO_LIVRE_PAGE_THROTTLE_MS);
+    }
+
+    return Array.from(out.entries()).map(([date, total]) => ({ date, total }));
+  }
+
   /** /categories/{id} é público e estável — cache por execução. */
   private async resolveCategoryName(
     categoryId: string | null,
@@ -642,6 +700,14 @@ type MercadoLivreShipmentResponse = {
 type MercadoLivreItemsSearchResponse = {
   results?: Array<string | null> | null;
   scroll_id?: string | null;
+};
+
+type MercadoLivreVisitsResponse = {
+  total_visits?: number | null;
+  results?: Array<{
+    date?: string | null;
+    total?: number | string | null;
+  } | null> | null;
 };
 
 type MercadoLivreItemBodyPayload = {

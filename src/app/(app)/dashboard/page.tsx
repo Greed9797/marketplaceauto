@@ -1,6 +1,7 @@
 import {
   BarChart3,
   Coins,
+  Eye,
   MousePointerClick,
   PackageCheck,
   Percent,
@@ -226,6 +227,16 @@ export default async function DashboardPage({
           previousValue={formatIntegerBR(snapshot.kpis.orders.previousValue)}
           showComparison={showComparison}
           value={formatIntegerBR(snapshot.kpis.orders.value)}
+        />
+        <OperationalKpiCard
+          accent="var(--info)"
+          compact
+          icon={<Eye aria-hidden className="size-4" />}
+          kpi={snapshot.kpis.sessions}
+          label="Visitas"
+          previousValue={formatIntegerBR(snapshot.kpis.sessions.previousValue)}
+          showComparison={showComparison}
+          value={formatIntegerBR(snapshot.kpis.sessions.value)}
         />
         {!MARKETPLACE_FIRST ? (
           <OperationalKpiCard

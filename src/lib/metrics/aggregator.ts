@@ -600,11 +600,22 @@ export function buildDashboardSnapshot(input: {
     (sum, metric) => sum + asInteger(metric.addToCart),
     0,
   );
-  const sessions = currentMetrics.reduce(
+  // Visitas/sessões são somadas de TODAS as fontes na janela (não só as de
+  // tráfego pago): o GA4 grava sessions em source=GA4 e as visitas do
+  // Mercado Livre em source=MERCADO_LIVRE. Cada linha rotula sua própria
+  // fonte e não se sobrepõe (linhas de receita têm sessions=0), então somar
+  // tudo não dá dupla contagem.
+  const currentSessionMetrics = input.metrics.filter((metric) =>
+    isWithin(metric.date, period.from, period.to),
+  );
+  const previousSessionMetrics = input.metrics.filter((metric) =>
+    isWithin(metric.date, period.comparison.from, period.comparison.to),
+  );
+  const sessions = currentSessionMetrics.reduce(
     (sum, metric) => sum + asInteger(metric.sessions),
     0,
   );
-  const previousSessions = previousMetrics.reduce(
+  const previousSessions = previousSessionMetrics.reduce(
     (sum, metric) => sum + asInteger(metric.sessions),
     0,
   );
@@ -1150,6 +1161,18 @@ export async function getDashboardSnapshot(input: {
     commerceProviders,
   };
 
+  // Fontes cujas linhas de DailyMetric alimentam o dashboard: as de tráfego
+  // pago (spend/cliques/etc.) MAIS as que gravam visitas/sessões — GA4 e o
+  // Mercado Livre (visitas do seller). Sem elas no fetch, o card "Visitas"
+  // ficaria vazio mesmo com dados no banco.
+  const metricSources = Array.from(
+    new Set<ConnectorProvider>([
+      ...trafficProviders,
+      ...commerceProviders,
+      ConnectorProvider.GA4,
+    ]),
+  );
+
   try {
     const [orders, orderItems, metrics, connectorAccounts] = await Promise.all([
       findDashboardOrders(queryInput),
@@ -1158,7 +1181,7 @@ export async function getDashboardSnapshot(input: {
         where: {
           workspaceId: input.workspaceId,
           source: {
-            in: trafficProviders,
+            in: metricSources,
           },
           date: {
             gte: input.period.comparison.from,

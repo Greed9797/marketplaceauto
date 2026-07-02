@@ -14,6 +14,7 @@ import {
   supportsInventory,
   syncConnectorInventory,
 } from "@/lib/connectors/inventory-sync";
+import { syncMercadoLivreVisits } from "@/lib/connectors/visits-sync";
 import { normalizeManualCommerceOrder } from "@/lib/connectors/manual-commerce";
 import {
   connectorAccessTokenFromAccount,
@@ -1196,6 +1197,23 @@ export async function syncEcommerceOrders(input: {
         const message = err instanceof Error ? err.message : "unknown";
         console.error(
           `[inventory-sync] ${connector.provider} ${connector.id}: ${message}`,
+        );
+      }
+    }
+
+    // Best-effort: visitas diárias do Mercado Livre → DailyMetric.sessions
+    // (card "Visitas"). Suplementar à receita, nunca derruba o order sync.
+    if (connector.provider === ConnectorProvider.MERCADO_LIVRE) {
+      try {
+        await syncMercadoLivreVisits({
+          connectorAccountId: connector.id,
+          since: input.range.since,
+          until: input.range.until,
+        });
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : "unknown";
+        console.error(
+          `[visits-sync] ${connector.provider} ${connector.id}: ${message}`,
         );
       }
     }
