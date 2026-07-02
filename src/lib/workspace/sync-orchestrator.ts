@@ -31,6 +31,23 @@ function estimatedBatchMs(provider: ConnectorProvider): number {
   }
 }
 
+/**
+ * Schema-qualified identifier prefix for raw SQL. Prisma reads the target
+ * schema from DATABASE_URL's `?schema=` param and qualifies its own generated
+ * queries with it, but $queryRaw text goes verbatim — and the pgbouncer
+ * transaction pooler does not preserve search_path between transactions, so an
+ * unqualified table name resolves to `public` and fails with 42P01.
+ */
+function quotedDbSchema(): string {
+  try {
+    const url = new URL(process.env.DATABASE_URL ?? "");
+    const schema = url.searchParams.get("schema") ?? "public";
+    return `"${schema.replace(/"/g, "")}"`;
+  } catch {
+    return '"public"';
+  }
+}
+
 export const COOLDOWN_MS = 30 * 60 * 1000; // 30min on-login
 export const BACKGROUND_THRESHOLD_MS = 90 * 60 * 1000; // 90min cron
 export const LOCK_STALE_MS = 5 * 60 * 1000; // 5min — release stuck locks fast
@@ -106,10 +123,13 @@ export async function triggerWorkspaceSyncIfStale(
   // call and only claims when cooldown passed AND no fresh lock. The conditional
   // sits inside ON CONFLICT DO UPDATE, so two concurrent callers can never both
   // claim — Postgres serializes the row-level update.
+  // Raw SQL must schema-qualify the table: Prisma auto-qualifies its generated
+  // queries, but $queryRaw goes verbatim and the pgbouncer transaction pooler
+  // does not preserve search_path (42P01 in prod without this).
   const claimId = randomUUID();
   const claimedRows = await prisma.$queryRaw<Array<{ workspaceId: string }>>(
     Prisma.sql`
-      INSERT INTO "WorkspaceSyncState" (
+      INSERT INTO ${Prisma.raw(`${quotedDbSchema()}."WorkspaceSyncState"`)} (
         "id", "workspaceId", "lastSyncStartedAt", "lastSyncStatus",
         "triggeredBy", "syncCount", "updatedAt"
       )
