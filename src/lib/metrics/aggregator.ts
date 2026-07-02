@@ -40,6 +40,9 @@ export type DashboardOrderItemRow = {
   total: NumericLike;
   status?: string | null;
   placedAt: Date;
+  // Parent order's creation date; items bucket by this when present so the
+  // products/categories breakdown matches the headline revenue window.
+  orderCreatedAt?: Date | null;
 };
 
 export type DashboardMetricRow = {
@@ -240,8 +243,13 @@ function brtBound(date: Date) {
 
 // Revenue is attributed to the order's CREATION date (matching the store's own
 // revenue report), falling back to placedAt (paid_at) for legacy rows whose
-// orderCreatedAt has not been backfilled yet.
-function orderRevenueDate(order: DashboardOrderRow): Date {
+// orderCreatedAt has not been backfilled yet. Shared by order rows AND order
+// item rows (items carry the parent order's creation date) so the headline and
+// the products/categories breakdown use the same date basis.
+function orderRevenueDate(order: {
+  orderCreatedAt?: Date | null;
+  placedAt: Date;
+}): Date {
   return order.orderCreatedAt ?? order.placedAt;
 }
 
@@ -523,7 +531,9 @@ export function buildDashboardSnapshot(input: {
   );
   const filteredOrderItems = (input.orderItems ?? []).filter(
     (item) =>
-      isWithinBrt(item.placedAt, period.from, period.to) &&
+      // Same date basis as the headline: parent order's creation date with
+      // placedAt fallback, so the breakdown reconciles with the revenue KPI.
+      isWithinBrt(orderRevenueDate(item), period.from, period.to) &&
       // Line items inherit the parent order's paid state and frequently arrive
       // without their own status — count them unless the status is explicitly a
       // non-approved (pending / cancelled / refunded) term. Orders themselves
@@ -1337,18 +1347,23 @@ async function findDashboardOrderItems(
   input: DashboardSnapshotQueryInput,
 ): Promise<DashboardOrderItemRow[]> {
   try {
+    // BRT day window (UTC-3) — see findDashboardOrders.
+    const gte = brtBound(input.period.from);
+    const lt = brtBound(dayAfter(input.period.to));
     const rows = await prisma.ecommerceOrderItem.findMany({
       where: {
         workspaceId: input.workspaceId,
+        // Filter by the PARENT order's effective revenue date (creation date
+        // with placedAt fallback) — the same window as findDashboardOrders —
+        // so the products/categories breakdown reconciles with the headline.
         ecommerceOrder: {
           platform: {
             in: input.commerceProviders,
           },
-        },
-        // BRT day window (UTC-3) — see findDashboardOrders.
-        placedAt: {
-          gte: brtBound(input.period.from),
-          lt: brtBound(dayAfter(input.period.to)),
+          OR: [
+            { orderCreatedAt: { gte, lt } },
+            { orderCreatedAt: null, placedAt: { gte, lt } },
+          ],
         },
       },
       select: {
@@ -1360,6 +1375,7 @@ async function findDashboardOrderItems(
         ecommerceOrder: {
           select: {
             status: true,
+            orderCreatedAt: true,
           },
         },
       },
@@ -1371,6 +1387,7 @@ async function findDashboardOrderItems(
       quantity: row.quantity,
       total: row.total,
       placedAt: row.placedAt,
+      orderCreatedAt: row.ecommerceOrder.orderCreatedAt,
       status: row.ecommerceOrder.status,
       categoryName: null,
     }));

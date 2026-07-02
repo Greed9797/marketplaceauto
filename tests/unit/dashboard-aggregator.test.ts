@@ -587,4 +587,53 @@ describe("dashboard aggregator", () => {
     expect(snapshot.kpis.revenue.value).toBe(150);
     expect(snapshot.kpis.approvedOrders.value).toBe(3);
   });
+
+  it("buckets order items by the parent order's creation date, matching the headline", () => {
+    const period = getDashboardPeriod(
+      { period: "custom", from: "2026-06-01", to: "2026-06-30" },
+      new Date("2026-07-15T12:00:00.000Z"),
+    );
+    const snapshot = buildDashboardSnapshot({
+      period,
+      commerceProviders: [ConnectorProvider.NUVEMSHOP],
+      metrics: [],
+      orders: [
+        {
+          connectorAccountId: "nuvem-1",
+          platform: ConnectorProvider.NUVEMSHOP,
+          orderTotal: "100.00",
+          status: "paid",
+          orderCreatedAt: new Date("2026-06-15T12:00:00.000Z"),
+          placedAt: new Date("2026-07-10T12:00:00.000Z"),
+        },
+      ],
+      orderItems: [
+        {
+          // Item of the June-created, July-paid order: placedAt mirrors the
+          // parent's paid date (July) but must count in June like the headline.
+          productName: "Camiseta",
+          quantity: 2,
+          total: "100.00",
+          status: "paid",
+          placedAt: new Date("2026-07-10T12:00:00.000Z"),
+          orderCreatedAt: new Date("2026-06-15T12:00:00.000Z"),
+        },
+        {
+          // Legacy item (no creation date) paid in July → stays out of June.
+          productName: "Bermuda",
+          quantity: 1,
+          total: "50.00",
+          status: "paid",
+          placedAt: new Date("2026-07-10T12:00:00.000Z"),
+        },
+      ],
+    });
+
+    const byName = new Map(
+      snapshot.products.map((product) => [product.productName, product]),
+    );
+    expect(byName.has("Camiseta")).toBe(true);
+    expect(byName.get("Camiseta")?.quantitySold).toBe(2);
+    expect(byName.has("Bermuda")).toBe(false);
+  });
 });
