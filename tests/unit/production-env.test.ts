@@ -93,8 +93,8 @@ describe("production env validation", () => {
     ).toEqual([
       "AUTH_TRUST_HOST must be true in production.",
       "NEXTAUTH_URL must use https in production.",
-      "DATABASE_URL must include schema=w3marketplace in production.",
-      "DIRECT_URL must include schema=w3marketplace in production.",
+      "DATABASE_URL must include schema=w3ads (current) or schema=w3marketplace in production.",
+      "DIRECT_URL must include schema=w3ads (current) or schema=w3marketplace in production.",
       "DATABASE_URL must use the Supabase transaction pooler (pgbouncer / port 6543) in serverless production.",
     ]);
   });
