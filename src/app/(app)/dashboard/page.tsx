@@ -1,10 +1,12 @@
 import {
   BarChart3,
+  Coins,
   MousePointerClick,
   PackageCheck,
   Percent,
   ReceiptText,
   ShoppingCart,
+  Target,
   TrendingUp,
 } from "lucide-react";
 import { ConnectorProvider } from "@prisma/client";
@@ -28,6 +30,7 @@ import {
   formatCurrencyBR,
   formatIntegerBR,
   formatPercentBR,
+  formatRoasBR,
 } from "@/lib/utils/format-br";
 
 type DashboardPageProps = {
@@ -157,6 +160,30 @@ export default async function DashboardPage({
             format: "currency",
           }}
           value={formatCurrencyBR(snapshot.kpis.revenue.value)}
+        />
+        {MARKETPLACE_FIRST ? (
+          <OperationalKpiCard
+            accent="var(--w3-gold)"
+            icon={<Coins aria-hidden className="size-4" />}
+            kpi={snapshot.kpis.spend}
+            label="Investimento"
+            previousValue={formatCurrencyBR(snapshot.kpis.spend.previousValue)}
+            showComparison={showComparison}
+            chart={{
+              data: chartSeries("spend", "previousSpend"),
+              format: "currency",
+            }}
+            value={formatCurrencyBR(snapshot.kpis.spend.value)}
+          />
+        ) : null}
+        <OperationalKpiCard
+          accent="var(--success)"
+          icon={<Target aria-hidden className="size-4" />}
+          kpi={snapshot.kpis.roas}
+          label="ROAS"
+          previousValue={formatRoasBR(snapshot.kpis.roas.previousValue)}
+          showComparison={showComparison}
+          value={formatRoasBR(snapshot.kpis.roas.value)}
         />
         {!MARKETPLACE_FIRST ? (
           <OperationalKpiCard

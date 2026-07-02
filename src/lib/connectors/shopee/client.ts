@@ -688,9 +688,7 @@ export function normalizeShopeeInventoryItem(
   if (!item || item.item_id === undefined || item.item_id === null) {
     return null;
   }
-  const stock = Number(
-    item.stock_info_v2?.summary_info?.total_available_stock,
-  );
+  const stock = Number(item.stock_info_v2?.summary_info?.total_available_stock);
   const categoryId = Number(item.category_id);
   return {
     externalProductId: String(item.item_id),

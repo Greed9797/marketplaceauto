@@ -225,7 +225,9 @@ export function normalizeMercadoLivreOrder(
  * do id ISO ("BR-SC" → "SC"). Nome primeiro: os demais conectores gravam nome
  * por extenso e o widget de vendas-por-estado agrupa por string.
  */
-function stateLabel(state: MercadoLivreStatePayload | undefined): string | null {
+function stateLabel(
+  state: MercadoLivreStatePayload | undefined,
+): string | null {
   if (!state) return null;
   const name = state.name?.trim();
   if (name) return name;
