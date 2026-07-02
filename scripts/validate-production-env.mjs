@@ -117,9 +117,18 @@ export function productionEnvErrors(env = process.env) {
     errors.push("NEXTAUTH_URL must use https in production.");
   }
 
+  // Prod data lives in schema=w3ads today; schema=w3marketplace is the target
+  // of the (unfinished) fusion migration. Accept both, reject anything else —
+  // an URL without an explicit schema silently lands on `public`.
   for (const key of ["DATABASE_URL", "DIRECT_URL"]) {
-    if (hasText(env[key]) && !env[key].includes("schema=w3marketplace")) {
-      errors.push(`${key} must include schema=w3marketplace in production.`);
+    if (
+      hasText(env[key]) &&
+      !env[key].includes("schema=w3ads") &&
+      !env[key].includes("schema=w3marketplace")
+    ) {
+      errors.push(
+        `${key} must include schema=w3ads (current) or schema=w3marketplace in production.`,
+      );
     }
   }
 
