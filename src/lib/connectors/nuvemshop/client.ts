@@ -160,6 +160,10 @@ function normalizeNuvemshopOrder(order: NuvemshopOrderPayload): ShopifyOrder {
     throw new Error("Nuvemshop order is missing id");
   }
 
+  // Creation timestamp for revenue bucketing (NuvemShop reports revenue by
+  // created_at). pickValidIsoDate returns "" when absent/invalid → store null.
+  const orderCreatedAtIso = pickValidIsoDate(order.created_at);
+
   return {
     externalOrderId,
     orderNumber: asString(order.number),
@@ -194,6 +198,7 @@ function normalizeNuvemshopOrder(order: NuvemshopOrderPayload): ShopifyOrder {
       order.completed_at,
       order.created_at,
     ),
+    orderCreatedAt: orderCreatedAtIso || null,
     utmSource: order.utm_source ?? null,
     utmMedium: order.utm_medium ?? null,
     utmCampaign: order.utm_campaign ?? null,
@@ -349,7 +354,16 @@ export class NuvemshopClient {
     since: string;
     until: string;
     page: number;
+    // "created_at" (default) for historical backfill; "updated_at" for the
+    // incremental recurring sync so late-paid / refunded transitions surface.
+    dateField?: "created_at" | "updated_at";
+    // true (default) filters payment_status=paid at the source; false pulls all
+    // payment statuses (status=any) so pending→paid and paid→refunded are seen
+    // and the paid/non-cancelled decision moves to the aggregation layer.
+    paidOnly?: boolean;
   }) {
+    const dateField = input.dateField ?? "created_at";
+    const paidOnly = input.paidOnly ?? true;
     const url = new URL(`${this.config.apiBaseUrl}/${input.storeId}/orders`);
     // `since`/`until` may arrive as a full ISO instant (e.g.
     // "2026-06-01T00:00:00.000Z") from the sync range or as a plain
@@ -357,19 +371,20 @@ export class NuvemshopClient {
     // so we never emit a double-suffixed string like "...000ZT00:00:00Z",
     // which Nuvemshop rejects with HTTP 422 Unprocessable Entity.
     url.searchParams.set(
-      "created_at_min",
+      `${dateField}_min`,
       `${input.since.slice(0, 10)}T00:00:00Z`,
     );
     url.searchParams.set(
-      "created_at_max",
+      `${dateField}_max`,
       `${input.until.slice(0, 10)}T23:59:59Z`,
     );
-    // Fulfillment-agnostic (open/closed), but ONLY paid orders: revenue must
-    // count received sales and nothing else. Pending/authorized/cancelled/
-    // refunded orders are never pulled or stored. Mirrors isApprovedOrderStatus
-    // at the metric rollup, enforcing it one layer earlier at the source.
+    // Fulfillment-agnostic (open/closed). payment_status is set only in paidOnly
+    // mode; incremental sync pulls every payment status (status=any) and lets the
+    // metric rollup (isApprovedOrderStatus) decide revenue one layer later.
     url.searchParams.set("status", "any");
-    url.searchParams.set("payment_status", "paid");
+    if (paidOnly) {
+      url.searchParams.set("payment_status", "paid");
+    }
     url.searchParams.set("page", String(input.page));
     url.searchParams.set("per_page", "200");
 
@@ -391,6 +406,10 @@ export class NuvemshopClient {
     deadlineMs?: number;
     /** Resume pagination from this 1-based page (defaults to page 1). */
     startPage?: number;
+    /** Filter by "created_at" (default, backfill) or "updated_at" (incremental). */
+    dateField?: "created_at" | "updated_at";
+    /** true (default) = payment_status=paid; false = all payment statuses. */
+    paidOnly?: boolean;
     /**
      * Per-page persistence callback. When provided, each page's orders are
      * handed to it AS THEY ARE FETCHED and NOT accumulated in memory (returned
@@ -421,6 +440,8 @@ export class NuvemshopClient {
         since: input.since,
         until: input.until,
         page,
+        dateField: input.dateField,
+        paidOnly: input.paidOnly,
       });
       let response: { data: NuvemshopOrderPayload[]; headers: Headers };
       try {

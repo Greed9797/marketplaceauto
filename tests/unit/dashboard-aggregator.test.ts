@@ -534,4 +534,57 @@ describe("dashboard aggregator", () => {
     expect(byName.get("Untouched")?.stockQuantity).toBeNull();
     expect(byName.get("Mixed")?.stockQuantity).toBe("unlimited");
   });
+
+  it("buckets NuvemShop revenue by orderCreatedAt with placedAt fallback", () => {
+    const period = getDashboardPeriod(
+      { period: "custom", from: "2026-06-01", to: "2026-06-30" },
+      new Date("2026-07-15T12:00:00.000Z"),
+    );
+    const snapshot = buildDashboardSnapshot({
+      period,
+      commerceProviders: [ConnectorProvider.NUVEMSHOP],
+      orders: [
+        {
+          // Created in June, PAID in July → must count in June.
+          connectorAccountId: "nuvem-1",
+          platform: ConnectorProvider.NUVEMSHOP,
+          orderTotal: "100.00",
+          status: "paid",
+          orderCreatedAt: new Date("2026-06-15T12:00:00.000Z"),
+          placedAt: new Date("2026-07-10T12:00:00.000Z"),
+        },
+        {
+          // Legacy row (orderCreatedAt null) → falls back to placedAt in June.
+          connectorAccountId: "nuvem-1",
+          platform: ConnectorProvider.NUVEMSHOP,
+          orderTotal: "40.00",
+          status: "paid",
+          placedAt: new Date("2026-06-20T12:00:00.000Z"),
+        },
+        {
+          // Created in June but cancelled → revenue zero.
+          connectorAccountId: "nuvem-1",
+          platform: ConnectorProvider.NUVEMSHOP,
+          orderTotal: "999.00",
+          status: "cancelado",
+          orderCreatedAt: new Date("2026-06-05T12:00:00.000Z"),
+          placedAt: new Date("2026-06-05T12:00:00.000Z"),
+        },
+        {
+          // BRT boundary: 2026-06-30 23:30 BRT = 2026-07-01T02:30Z → June.
+          connectorAccountId: "nuvem-1",
+          platform: ConnectorProvider.NUVEMSHOP,
+          orderTotal: "10.00",
+          status: "paid",
+          orderCreatedAt: new Date("2026-07-01T02:30:00.000Z"),
+          placedAt: new Date("2026-07-01T02:30:00.000Z"),
+        },
+      ],
+      metrics: [],
+    });
+
+    // 100 (June-created, July-paid) + 40 (fallback) + 10 (BRT boundary) = 150.
+    expect(snapshot.kpis.revenue.value).toBe(150);
+    expect(snapshot.kpis.approvedOrders.value).toBe(3);
+  });
 });

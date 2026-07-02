@@ -177,36 +177,50 @@ async function fetchCampaignDailyRows(input: {
   dateTo: string;
   fetchImpl: FetchLike;
 }): Promise<MercadoLivreAdsDailyRow[]> {
-  const url = new URL(
-    `${input.apiBaseUrl}/advertising/advertisers/${input.advertiserId}/product_ads/campaigns`,
-  );
-  url.searchParams.set("date_from", input.dateFrom);
-  url.searchParams.set("date_to", input.dateTo);
-  url.searchParams.set("metrics", "clicks,prints,cost");
-  url.searchParams.set("aggregation_type", "DAILY");
-  url.searchParams.set("limit", "100");
-  url.searchParams.set("offset", "0");
+  const pageSize = 100;
+  // Hard stop well past any realistic campaign count so a server that echoes a
+  // full page forever can't loop us indefinitely.
+  const maxOffset = 10_000;
+  const rows: MercadoLivreAdsDailyRow[] = [];
 
-  const response = await callWithRetry(async () => {
-    const res = await input.fetchImpl(url, {
-      headers: {
-        Authorization: `Bearer ${input.accessToken}`,
-        "api-version": "2",
-      },
-      signal: AbortSignal.timeout(15_000),
+  for (let offset = 0; offset <= maxOffset; offset += pageSize) {
+    const url = new URL(
+      `${input.apiBaseUrl}/advertising/advertisers/${input.advertiserId}/product_ads/campaigns`,
+    );
+    url.searchParams.set("date_from", input.dateFrom);
+    url.searchParams.set("date_to", input.dateTo);
+    url.searchParams.set("metrics", "clicks,prints,cost");
+    url.searchParams.set("aggregation_type", "DAILY");
+    url.searchParams.set("limit", String(pageSize));
+    url.searchParams.set("offset", String(offset));
+
+    const response = await callWithRetry(async () => {
+      const res = await input.fetchImpl(url, {
+        headers: {
+          Authorization: `Bearer ${input.accessToken}`,
+          "api-version": "2",
+        },
+        signal: AbortSignal.timeout(15_000),
+      });
+      const body = await res.text();
+      if (!res.ok) {
+        throw new Error(
+          `Mercado Livre Product Ads API ${res.status}: ${body.slice(0, 200)}`,
+        );
+      }
+      if (!body.trim())
+        return { results: [] } as MercadoLivreAdsCampaignsResponse;
+      return JSON.parse(body) as MercadoLivreAdsCampaignsResponse;
     });
-    const body = await res.text();
-    if (!res.ok) {
-      throw new Error(
-        `Mercado Livre Product Ads API ${res.status}: ${body.slice(0, 200)}`,
-      );
-    }
-    if (!body.trim())
-      return { results: [] } as MercadoLivreAdsCampaignsResponse;
-    return JSON.parse(body) as MercadoLivreAdsCampaignsResponse;
-  });
 
-  return response.results ?? [];
+    const page = response.results ?? [];
+    rows.push(...page);
+    // Short page = last page (mirrors the ML orders client's stop condition
+    // when paging.total is absent).
+    if (page.length < pageSize) break;
+  }
+
+  return rows;
 }
 
 /**

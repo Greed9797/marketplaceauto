@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { ConnectorStatus, type Prisma } from "@prisma/client";
+import { type Prisma } from "@prisma/client";
 
+import { RETRYABLE_CONNECTOR_STATUSES } from "@/lib/connectors/sync-error";
 import { prisma } from "@/lib/db/prisma";
 import {
   BACKGROUND_THRESHOLD_MS,
@@ -36,7 +37,9 @@ export async function GET(request: NextRequest) {
   const severeCutoff = new Date(Date.now() - 2 * BACKGROUND_THRESHOLD_MS);
 
   const staleWhere: Prisma.WorkspaceWhereInput = {
-    connectors: { some: { status: ConnectorStatus.ACTIVE } },
+    // Include ERROR connectors so a past transient failure recovers on its own
+    // instead of staying permanently disconnected until a manual reconnect.
+    connectors: { some: { status: { in: [...RETRYABLE_CONNECTOR_STATUSES] } } },
     OR: [
       { syncState: null },
       { syncState: { lastSyncedAt: { lt: cutoff } } },
@@ -61,7 +64,9 @@ export async function GET(request: NextRequest) {
     prisma.workspace.count({ where: staleWhere }),
     prisma.workspace.count({
       where: {
-        connectors: { some: { status: ConnectorStatus.ACTIVE } },
+        connectors: {
+          some: { status: { in: [...RETRYABLE_CONNECTOR_STATUSES] } },
+        },
         OR: [
           { syncState: null },
           { syncState: { lastSyncedAt: { lt: severeCutoff } } },

@@ -37,6 +37,13 @@ export function backfillBatchMonthsFor(provider: string): number {
 export type SyncRange = {
   since: string;
   until: string;
+  // When "updated_at", the source API is filtered by update time (incremental
+  // recurring sync) instead of creation time (historical backfill). NuvemShop
+  // only; other providers ignore it. Defaults to "created_at".
+  dateField?: "created_at" | "updated_at";
+  // When false, pull all payment statuses (status=any) so pending→paid and
+  // paid→refunded transitions are captured. Defaults to true (paid only).
+  paidOnly?: boolean;
 };
 
 function monthStartUtc(date: Date): Date {
@@ -54,6 +61,45 @@ export function computeForegroundRange(now: Date = new Date()): SyncRange {
   return {
     since: monthStartUtc(now).toISOString(),
     until: todayIso(now),
+  };
+}
+
+/**
+ * Overlap re-scanned before lastSyncedAt so an order updated right around the
+ * previous sync boundary is not missed. 48h absorbs clock skew and cron gaps.
+ */
+export const INCREMENTAL_OVERLAP_MS = 48 * 60 * 60 * 1000;
+
+/**
+ * First-run lookback when the connector has never synced: cover the current and
+ * previous month by update time so recent late-paid orders are captured.
+ */
+export const INCREMENTAL_FIRST_RUN_DAYS = 35;
+
+/**
+ * Recurring incremental window by UPDATE time. Replaces the "current UTC month
+ * by created_at" foreground window for NuvemShop: an order created earlier and
+ * paid now has a fresh updated_at, so it is re-fetched and its status updated —
+ * fixing the late-payment gap. Historical loads still use computeBackfillBatch
+ * (by created_at).
+ */
+export function computeIncrementalRange(input: {
+  lastSyncedAt: Date | null;
+  now?: Date;
+  overlapMs?: number;
+  firstRunDays?: number;
+}): SyncRange {
+  const now = input.now ?? new Date();
+  const overlapMs = input.overlapMs ?? INCREMENTAL_OVERLAP_MS;
+  const firstRunDays = input.firstRunDays ?? INCREMENTAL_FIRST_RUN_DAYS;
+  const sinceDate = input.lastSyncedAt
+    ? new Date(input.lastSyncedAt.getTime() - overlapMs)
+    : new Date(now.getTime() - firstRunDays * 24 * 60 * 60 * 1000);
+  return {
+    since: sinceDate.toISOString(),
+    until: todayIso(now),
+    dateField: "updated_at",
+    paidOnly: false,
   };
 }
 

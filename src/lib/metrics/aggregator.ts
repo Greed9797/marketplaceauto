@@ -27,6 +27,9 @@ export type DashboardOrderRow = {
   utmMedium?: string | null;
   utmCampaign?: string | null;
   placedAt: Date;
+  // Order creation date; revenue buckets by this when present (falls back to
+  // placedAt for legacy rows not yet re-backfilled).
+  orderCreatedAt?: Date | null;
 };
 
 export type DashboardOrderItemRow = {
@@ -235,6 +238,13 @@ function brtBound(date: Date) {
   return new Date(date.getTime() + BRT_OFFSET_MS);
 }
 
+// Revenue is attributed to the order's CREATION date (matching the store's own
+// revenue report), falling back to placedAt (paid_at) for legacy rows whose
+// orderCreatedAt has not been backfilled yet.
+function orderRevenueDate(order: DashboardOrderRow): Date {
+  return order.orderCreatedAt ?? order.placedAt;
+}
+
 function round(value: number, decimals = 2) {
   return Number(value.toFixed(decimals));
 }
@@ -294,7 +304,9 @@ function orderCount(order: DashboardOrderRow) {
 }
 
 function approvedOrderCount(order: DashboardOrderRow) {
-  return isApprovedOrderStatus(order.status, order.platform) ? orderCount(order) : 0;
+  return isApprovedOrderStatus(order.status, order.platform)
+    ? orderCount(order)
+    : 0;
 }
 
 // isApprovedOrderStatus is imported from ./order-status and re-exported above.
@@ -519,12 +531,16 @@ export function buildDashboardSnapshot(input: {
       (item.status == null || isApprovedOrderStatus(item.status)),
   );
   const currentOrders = filteredOrders.filter((order) =>
-    isWithinBrt(order.placedAt, period.from, period.to),
+    isWithinBrt(orderRevenueDate(order), period.from, period.to),
   );
   const previousOrders = input.orders.filter(
     (order) =>
       commerceProviders.includes(order.platform) &&
-      isWithinBrt(order.placedAt, period.comparison.from, period.comparison.to),
+      isWithinBrt(
+        orderRevenueDate(order),
+        period.comparison.from,
+        period.comparison.to,
+      ),
   );
   const currentMetrics = filteredMetrics.filter((metric) =>
     isWithin(metric.date, period.from, period.to),
@@ -541,13 +557,17 @@ export function buildDashboardSnapshot(input: {
   const revenue = currentOrders.reduce(
     (sum, order) =>
       sum +
-      (isApprovedOrderStatus(order.status, order.platform) ? asNumber(order.orderTotal) : 0),
+      (isApprovedOrderStatus(order.status, order.platform)
+        ? asNumber(order.orderTotal)
+        : 0),
     0,
   );
   const previousRevenue = previousOrders.reduce(
     (sum, order) =>
       sum +
-      (isApprovedOrderStatus(order.status, order.platform) ? asNumber(order.orderTotal) : 0),
+      (isApprovedOrderStatus(order.status, order.platform)
+        ? asNumber(order.orderTotal)
+        : 0),
     0,
   );
   const spend = currentMetrics.reduce(
@@ -639,7 +659,7 @@ export function buildDashboardSnapshot(input: {
   );
 
   for (const order of currentOrders) {
-    const item = daily.get(brtDateKey(order.placedAt));
+    const item = daily.get(brtDateKey(orderRevenueDate(order)));
     if (item) {
       const approved = approvedOrderCount(order);
       // Same rule as the headline revenue: only paid orders count toward the
@@ -686,7 +706,9 @@ export function buildDashboardSnapshot(input: {
   );
 
   for (const order of previousOrders) {
-    const currentKey = alignedByPreviousDate.get(brtDateKey(order.placedAt));
+    const currentKey = alignedByPreviousDate.get(
+      brtDateKey(orderRevenueDate(order)),
+    );
     const item = currentKey ? daily.get(currentKey) : null;
     if (item) {
       const approved = approvedOrderCount(order);
@@ -1247,18 +1269,22 @@ function dayAfter(date: Date): Date {
 async function findDashboardOrders(
   input: DashboardSnapshotQueryInput,
 ): Promise<DashboardOrderRow[]> {
+  const gte = brtBound(input.period.comparison.from);
+  const lt = brtBound(dayAfter(input.period.to));
   const where = {
     workspaceId: input.workspaceId,
     platform: {
       in: input.commerceProviders,
     },
-    // BRT day window (UTC-3): shift the UTC-midnight bounds by +3h so the fetch
-    // covers the store's local day. Precise per-day bucketing happens in-memory
-    // via brtDateKey/isWithinBrt.
-    placedAt: {
-      gte: brtBound(input.period.comparison.from),
-      lt: brtBound(dayAfter(input.period.to)),
-    },
+    // Fetch by CREATION date (the revenue bucket) when populated; fall back to
+    // placedAt for legacy rows whose orderCreatedAt is still null. This catches
+    // orders created in-window but paid later (placedAt outside the window).
+    // BRT day window (UTC-3): bounds shifted +3h; precise per-day bucketing
+    // happens in-memory via brtDateKey/isWithinBrt(orderRevenueDate).
+    OR: [
+      { orderCreatedAt: { gte, lt } },
+      { orderCreatedAt: null, placedAt: { gte, lt } },
+    ],
   };
 
   try {
@@ -1275,6 +1301,7 @@ async function findDashboardOrders(
         utmMedium: true,
         utmCampaign: true,
         placedAt: true,
+        orderCreatedAt: true,
       },
     });
   } catch (error) {
@@ -1301,6 +1328,7 @@ async function findDashboardOrders(
       ...order,
       status: order.status,
       shippingState: null,
+      orderCreatedAt: null,
     }));
   }
 }

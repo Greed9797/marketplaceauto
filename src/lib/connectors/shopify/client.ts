@@ -121,6 +121,10 @@ export type ShopifyOrder = {
   status: string;
   shippingState?: string | null;
   placedAt: string;
+  // Source platform order.created_at (ISO), used to bucket revenue by creation
+  // date. Optional/nullable: connectors that don't provide it leave it undefined
+  // and the aggregator falls back to placedAt.
+  orderCreatedAt?: string | null;
   utmSource?: string | null;
   utmMedium?: string | null;
   utmCampaign?: string | null;

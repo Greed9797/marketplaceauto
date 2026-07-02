@@ -24,7 +24,17 @@ export function getGlobalShopeeConfig(
   }
 
   const host = process.env.SHOPEE_HOST?.trim() || SHOPEE_DEFAULT_HOST;
-  const explicitRedirect = process.env.SHOPEE_REDIRECT_URI?.trim();
+  // SHOPEE_REDIRECT_URI is shared with the publisher OAuth flow (callback
+  // /api/auth/shopee/callback). When it points there, using it here would send
+  // the connector authorize to a redirect not registered for this flow.
+  // SHOPEE_CONNECTOR_REDIRECT_URI takes precedence; the shared var only applies
+  // when it targets the connector callback.
+  const sharedRedirect = process.env.SHOPEE_REDIRECT_URI?.trim();
+  const explicitRedirect =
+    process.env.SHOPEE_CONNECTOR_REDIRECT_URI?.trim() ||
+    (sharedRedirect && !sharedRedirect.includes("/api/auth/shopee/")
+      ? sharedRedirect
+      : undefined);
   const redirectUri =
     explicitRedirect ||
     `${redirectUriOrigin.replace(/\/$/, "")}/api/connectors/shopee/callback`;

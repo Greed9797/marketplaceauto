@@ -35,6 +35,8 @@ const ecommerceProviders = new Set<ConnectorProvider>([
   ConnectorProvider.MAGAZORD,
   ConnectorProvider.GOOGLE_SHEETS,
   ConnectorProvider.LOJA_INTEGRADA,
+  ConnectorProvider.MERCADO_LIVRE,
+  ConnectorProvider.SHOPEE,
 ]);
 
 function dateOnly(date: Date) {

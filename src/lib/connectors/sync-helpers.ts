@@ -8,7 +8,12 @@ import type { ProductionSyncType } from "@/lib/jobs/sync-operations";
 
 export type SyncHelperInput = {
   connectorAccountId: string;
-  range: { since: string; until: string };
+  range: {
+    since: string;
+    until: string;
+    dateField?: "created_at" | "updated_at";
+    paidOnly?: boolean;
+  };
   // Absolute epoch-ms wall-clock budget for the whole sync request. Heavy
   // ecommerce providers (iSET) stop paginating before it and report the window
   // incomplete so the route doesn't advance the backfill cursor past unfetched
@@ -35,6 +40,8 @@ export const SYNC_HELPERS: Partial<Record<ConnectorProvider, SyncHelper>> = {
   LOJA_INTEGRADA: (i) => syncEcommerceOrders({ ...i, syncType: BACKFILL }),
   NUVEMSHOP: (i) => syncEcommerceOrders({ ...i, syncType: BACKFILL }),
   SHOPIFY: (i) => syncEcommerceOrders({ ...i, syncType: BACKFILL }),
+  MERCADO_LIVRE: (i) => syncEcommerceOrders({ ...i, syncType: BACKFILL }),
+  SHOPEE: (i) => syncEcommerceOrders({ ...i, syncType: BACKFILL }),
   META_ADS: (i) => syncMetaDailyMetrics({ ...i, syncType: BACKFILL }),
   GOOGLE_ADS: (i) => syncGoogleAdsDailyMetrics({ ...i, syncType: BACKFILL }),
   GA4: (i) => syncGoogleAnalyticsSessions({ ...i, syncType: BACKFILL }),

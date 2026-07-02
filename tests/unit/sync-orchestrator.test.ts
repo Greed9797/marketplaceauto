@@ -1,7 +1,7 @@
-import { ConnectorStatus } from "@prisma/client";
+import { ConnectorProvider, ConnectorStatus } from "@prisma/client";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { prismaMocks } = vi.hoisted(() => ({
+const { prismaMocks, helperMocks } = vi.hoisted(() => ({
   prismaMocks: {
     workspace: { findUnique: vi.fn() },
     connectorAccount: { count: vi.fn(), findMany: vi.fn() },
@@ -13,6 +13,7 @@ const { prismaMocks } = vi.hoisted(() => ({
     },
     $queryRaw: vi.fn(),
   },
+  helperMocks: { nuvemshop: vi.fn() },
 }));
 
 vi.mock("@/lib/db/prisma", () => ({
@@ -20,7 +21,7 @@ vi.mock("@/lib/db/prisma", () => ({
 }));
 
 vi.mock("@/lib/connectors/sync-helpers", () => ({
-  SYNC_HELPERS: {},
+  SYNC_HELPERS: { NUVEMSHOP: helperMocks.nuvemshop },
   isoDaysAgo: (n: number) => `iso-${n}d`,
   todayIso: () => "iso-today",
 }));
@@ -41,6 +42,7 @@ beforeEach(() => {
   prismaMocks.workspaceSyncState.update.mockResolvedValue({});
   prismaMocks.workspaceSyncState.findUnique.mockResolvedValue(null);
   prismaMocks.$queryRaw.mockResolvedValue([]);
+  helperMocks.nuvemshop.mockResolvedValue({ complete: true, ordersCount: 0 });
 });
 
 describe("triggerWorkspaceSyncIfStale", () => {
@@ -205,19 +207,45 @@ describe("runWorkspaceSync", () => {
     expect(updateArgs.data.syncCount).toEqual({ increment: 1 });
   });
 
-  it("filters to ACTIVE connectors only and loads historicalSyncedAt", async () => {
+  it("loads retryable connectors (ACTIVE + ERROR) and historicalSyncedAt", async () => {
     prismaMocks.connectorAccount.findMany.mockResolvedValueOnce([]);
 
     await runWorkspaceSync("ws-1");
 
     expect(prismaMocks.connectorAccount.findMany).toHaveBeenCalledWith({
-      where: { workspaceId: "ws-1", status: ConnectorStatus.ACTIVE },
+      where: {
+        workspaceId: "ws-1",
+        // ERROR is retried too so a transient failure never strands a connection.
+        status: { in: [ConnectorStatus.ACTIVE, ConnectorStatus.ERROR] },
+      },
       select: {
         id: true,
         provider: true,
         historicalSyncedAt: true,
         historicalBackfillUntil: true,
+        lastSyncedAt: true,
       },
     });
+  });
+
+  it("syncs NuvemShop foreground incrementally by updated_at", async () => {
+    prismaMocks.connectorAccount.findMany.mockResolvedValueOnce([
+      {
+        id: "nuvem-1",
+        provider: ConnectorProvider.NUVEMSHOP,
+        // Both set → excluded from backfill; only the foreground runs.
+        historicalSyncedAt: new Date("2026-06-01T00:00:00.000Z"),
+        historicalBackfillUntil: new Date("2023-06-01T00:00:00.000Z"),
+        lastSyncedAt: new Date("2026-06-30T09:00:00.000Z"),
+      },
+    ]);
+
+    await runWorkspaceSync("ws-1", { includeBackfill: false });
+
+    expect(helperMocks.nuvemshop).toHaveBeenCalledTimes(1);
+    const call = helperMocks.nuvemshop.mock.calls[0][0];
+    expect(call.connectorAccountId).toBe("nuvem-1");
+    expect(call.range.dateField).toBe("updated_at");
+    expect(call.range.paidOnly).toBe(false);
   });
 });

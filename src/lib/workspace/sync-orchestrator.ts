@@ -1,14 +1,16 @@
 import { randomUUID } from "node:crypto";
 
-import { ConnectorProvider, ConnectorStatus, Prisma } from "@prisma/client";
+import { ConnectorProvider, Prisma } from "@prisma/client";
 import * as Sentry from "@sentry/nextjs";
 
 import { prisma } from "@/lib/db/prisma";
+import { RETRYABLE_CONNECTOR_STATUSES } from "@/lib/connectors/sync-error";
 import { SYNC_HELPERS } from "@/lib/connectors/sync-helpers";
 import {
   backfillBatchMonthsFor,
   computeBackfillBatch,
   computeForegroundRange,
+  computeIncrementalRange,
 } from "@/lib/connectors/sync-range";
 
 /**
@@ -91,7 +93,10 @@ export async function triggerWorkspaceSyncIfStale(
   }
 
   const activeCount = await prisma.connectorAccount.count({
-    where: { workspaceId: input.workspaceId, status: ConnectorStatus.ACTIVE },
+    where: {
+      workspaceId: input.workspaceId,
+      status: { in: [...RETRYABLE_CONNECTOR_STATUSES] },
+    },
   });
   if (activeCount === 0) {
     return { triggered: false, reason: "no_active_connectors" };
@@ -104,7 +109,7 @@ export async function triggerWorkspaceSyncIfStale(
   const claimId = randomUUID();
   const claimedRows = await prisma.$queryRaw<Array<{ workspaceId: string }>>(
     Prisma.sql`
-      INSERT INTO w3ads."WorkspaceSyncState" (
+      INSERT INTO "WorkspaceSyncState" (
         "id", "workspaceId", "lastSyncStartedAt", "lastSyncStatus",
         "triggeredBy", "syncCount", "updatedAt"
       )
@@ -118,12 +123,12 @@ export async function triggerWorkspaceSyncIfStale(
             "triggeredBy"       = EXCLUDED."triggeredBy",
             "updatedAt"         = EXCLUDED."updatedAt"
         WHERE (
-          w3ads."WorkspaceSyncState"."lastSyncedAt" IS NULL
-          OR w3ads."WorkspaceSyncState"."lastSyncedAt" < ${cooldownCutoff}
+          "WorkspaceSyncState"."lastSyncedAt" IS NULL
+          OR "WorkspaceSyncState"."lastSyncedAt" < ${cooldownCutoff}
         )
         AND (
-          w3ads."WorkspaceSyncState"."lastSyncStartedAt" IS NULL
-          OR w3ads."WorkspaceSyncState"."lastSyncStartedAt" < ${lockCutoff}
+          "WorkspaceSyncState"."lastSyncStartedAt" IS NULL
+          OR "WorkspaceSyncState"."lastSyncStartedAt" < ${lockCutoff}
         )
       RETURNING "workspaceId"
     `,
@@ -191,12 +196,18 @@ export async function runWorkspaceSync(
 
   try {
     const accounts = await prisma.connectorAccount.findMany({
-      where: { workspaceId, status: ConnectorStatus.ACTIVE },
+      // ERROR connectors are retried too (see RETRYABLE_CONNECTOR_STATUSES): a
+      // transient failure must not strand a connection until manual reconnect.
+      where: {
+        workspaceId,
+        status: { in: [...RETRYABLE_CONNECTOR_STATUSES] },
+      },
       select: {
         id: true,
         provider: true,
         historicalSyncedAt: true,
         historicalBackfillUntil: true,
+        lastSyncedAt: true,
       },
     });
 
@@ -216,10 +227,17 @@ export async function runWorkspaceSync(
     const syncable = accounts.filter((a) => SYNC_HELPERS[a.provider]);
     for (const account of syncable) {
       const helper = SYNC_HELPERS[account.provider]!;
+      // NuvemShop syncs incrementally by updated_at (status=any) so late-paid
+      // orders are re-fetched; other providers keep the created_at foreground
+      // window (their clients don't support updated_at filtering).
+      const range =
+        account.provider === ConnectorProvider.NUVEMSHOP
+          ? computeIncrementalRange({ lastSyncedAt: account.lastSyncedAt })
+          : computeForegroundRange();
       try {
         await helper({
           connectorAccountId: account.id,
-          range: computeForegroundRange(),
+          range,
           // Bound heavy providers (iSET) so a big foreground window can't run
           // past the function limit and get killed (orphaned RUNNING job).
           deadlineMs: hardDeadline,

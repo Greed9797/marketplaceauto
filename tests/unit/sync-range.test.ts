@@ -3,8 +3,11 @@ import { describe, expect, it } from "vitest";
 import {
   BACKFILL_BATCH_MONTHS,
   HISTORICAL_BACKFILL_DAYS,
+  INCREMENTAL_FIRST_RUN_DAYS,
+  INCREMENTAL_OVERLAP_MS,
   computeBackfillBatch,
   computeForegroundRange,
+  computeIncrementalRange,
 } from "@/lib/connectors/sync-range";
 
 describe("computeForegroundRange", () => {
@@ -86,5 +89,34 @@ describe("computeBackfillBatch", () => {
   it("constants reflect business rules", () => {
     expect(BACKFILL_BATCH_MONTHS).toBe(3);
     expect(HISTORICAL_BACKFILL_DAYS).toBe(1095);
+  });
+});
+
+describe("computeIncrementalRange", () => {
+  const now = new Date("2026-07-01T12:00:00.000Z");
+
+  it("re-scans from lastSyncedAt minus the overlap, by updated_at", () => {
+    const range = computeIncrementalRange({
+      lastSyncedAt: new Date("2026-06-30T09:00:00.000Z"),
+      now,
+    });
+    // 48h overlap before lastSyncedAt.
+    expect(range.since).toBe("2026-06-28T09:00:00.000Z");
+    expect(range.until).toBe("2026-07-01T23:59:59.999Z");
+    expect(range.dateField).toBe("updated_at");
+    expect(range.paidOnly).toBe(false);
+  });
+
+  it("falls back to a lookback window on first run (no lastSyncedAt)", () => {
+    const range = computeIncrementalRange({ lastSyncedAt: null, now });
+    // 35 days before now.
+    expect(range.since.slice(0, 10)).toBe("2026-05-27");
+    expect(range.dateField).toBe("updated_at");
+    expect(range.paidOnly).toBe(false);
+  });
+
+  it("constants reflect business rules", () => {
+    expect(INCREMENTAL_OVERLAP_MS).toBe(48 * 60 * 60 * 1000);
+    expect(INCREMENTAL_FIRST_RUN_DAYS).toBe(35);
   });
 });

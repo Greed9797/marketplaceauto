@@ -7,6 +7,7 @@ import { buildConnectorBackfillEvent } from "@/lib/connectors/backfill";
 import { vaultCredentialFields } from "@/lib/connectors/credentials";
 import { MercadoLivreClient } from "@/lib/connectors/mercado-livre/client";
 import { isNextControlFlowError } from "@/lib/connectors/oauth-route-error";
+import { isInngestConfigured } from "@/lib/connectors/inngest-config";
 import { prisma } from "@/lib/db/prisma";
 import { inngest } from "@/lib/jobs/inngest-client";
 import { resolveClienteForWorkspace } from "@/lib/publisher/cliente-access";
@@ -145,7 +146,7 @@ async function handleCallback(request: NextRequest) {
     },
   });
 
-  if (process.env.INNGEST_EVENT_KEY) {
+  if (isInngestConfigured()) {
     await inngest.send(
       buildConnectorBackfillEvent({
         provider: ConnectorProvider.MERCADO_LIVRE,

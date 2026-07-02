@@ -6,6 +6,7 @@ import {
   SyncStatus,
 } from "@prisma/client";
 import Decimal from "decimal.js";
+import * as Sentry from "@sentry/nextjs";
 
 import { isApprovedOrderStatus } from "@/lib/metrics/order-status";
 import { IsetClient } from "@/lib/connectors/iset/client";
@@ -31,6 +32,13 @@ import {
 } from "@/lib/connectors/nuvemshop/client";
 import { getGlobalShopeeConfig } from "@/lib/connectors/shopee/global-config";
 import { ShopeeClient } from "@/lib/connectors/shopee/client";
+import {
+  ConnectorRefreshError,
+  classifyConnectorSyncError,
+  grantStillDeadAfterRecheck,
+  isAuthFatalError,
+  statusForSyncFailure,
+} from "@/lib/connectors/sync-error";
 import { ShopifyClient } from "@/lib/connectors/shopify/client";
 import {
   buildMercadoLivreConfigFromProviderConfig,
@@ -51,6 +59,8 @@ import { ManualCommerceClient } from "./manual-commerce-client";
 export type EcommerceSyncRange = {
   since: string;
   until: string;
+  dateField?: "created_at" | "updated_at";
+  paidOnly?: boolean;
 };
 
 const ORDER_PERSIST_CONCURRENCY = 10;
@@ -96,7 +106,10 @@ export function mapEcommerceOrdersToDailyMetricSummaries(input: {
 
   for (const order of input.orders) {
     if (!isApprovedOrderStatus(order.status, input.provider)) continue;
-    const day = order.placedAt.slice(0, 10);
+    // Bucket by creation date (revenue report basis); fall back to placedAt for
+    // rows without a creation date.
+    const bucketDate = order.orderCreatedAt ?? order.placedAt;
+    const day = bucketDate.slice(0, 10);
     const current = byDay.get(day) ?? { revenue: new Decimal(0), orders: 0 };
     current.revenue = current.revenue.plus(order.orderTotal);
     current.orders +=
@@ -149,6 +162,7 @@ export function mapEcommerceOrderToRecord(input: {
     utmMedium: input.order.utmMedium,
     utmCampaign: input.order.utmCampaign,
     placedAt,
+    orderCreatedAt: parseOptionalDate(input.order.orderCreatedAt),
   };
 }
 
@@ -159,6 +173,17 @@ export function mapEcommerceOrderToRecord(input: {
  * inflate today's metrics with phantom orders).
  */
 function parsePlacedAt(value: string): Date | null {
+  const ts = Date.parse(value);
+  return Number.isFinite(ts) ? new Date(ts) : null;
+}
+
+/**
+ * Parses an optional ISO timestamp to Date, returning null for
+ * absent/empty/invalid input. Used for orderCreatedAt, which is nullable
+ * (connectors that don't provide a creation date leave it null).
+ */
+function parseOptionalDate(value: string | null | undefined): Date | null {
+  if (!value) return null;
   const ts = Date.parse(value);
   return Number.isFinite(ts) ? new Date(ts) : null;
 }
@@ -190,28 +215,55 @@ function mapEcommerceOrderItemsToRecords(input: {
  * dailyMetric separately. Returns the orders that were actually ingested
  * (invalid-date rows skipped) so callers can aggregate from them.
  */
+/**
+ * Splits a batch into orders with a valid placedAt (kept, with their upsert
+ * payload) and a count of those skipped for an invalid/empty date. Pure and
+ * exported so the skip logic is unit-testable without a DB.
+ */
+export function partitionOrdersForPersist(input: {
+  workspaceId: string;
+  connectorAccountId: string;
+  provider: ConnectorProvider;
+  orders: ShopifyOrder[];
+}): {
+  valid: Array<{
+    order: ShopifyOrder;
+    payload: NonNullable<ReturnType<typeof mapEcommerceOrderToRecord>>;
+  }>;
+  skippedInvalidDate: number;
+} {
+  const valid: Array<{
+    order: ShopifyOrder;
+    payload: NonNullable<ReturnType<typeof mapEcommerceOrderToRecord>>;
+  }> = [];
+  let skippedInvalidDate = 0;
+
+  for (const order of input.orders) {
+    const payload = mapEcommerceOrderToRecord({
+      workspaceId: input.workspaceId,
+      connectorAccountId: input.connectorAccountId,
+      provider: input.provider,
+      order,
+    });
+    if (payload === null) {
+      skippedInvalidDate += 1;
+      continue;
+    }
+    valid.push({ order, payload });
+  }
+
+  return { valid, skippedInvalidDate };
+}
+
 async function persistOrdersOnly(input: {
   workspaceId: string;
   connectorAccountId: string;
   provider: ConnectorProvider;
   orders: ShopifyOrder[];
-}): Promise<ShopifyOrder[]> {
-  let skippedInvalidDate = 0;
+}): Promise<{ ingestedOrders: ShopifyOrder[]; skippedInvalidDate: number }> {
+  const { valid: validOrders, skippedInvalidDate } =
+    partitionOrdersForPersist(input);
   const ingestedOrders: ShopifyOrder[] = [];
-  const validOrders: Array<{
-    order: ShopifyOrder;
-    payload: NonNullable<ReturnType<typeof mapEcommerceOrderToRecord>>;
-  }> = [];
-
-  for (const order of input.orders) {
-    const payload = mapEcommerceOrderToRecord({ ...input, order });
-    if (payload === null) {
-      skippedInvalidDate += 1;
-      continue;
-    }
-
-    validOrders.push({ order, payload });
-  }
 
   for (const batch of chunks(validOrders, ORDER_PERSIST_CONCURRENCY)) {
     await Promise.all(
@@ -275,12 +327,14 @@ async function persistOrdersOnly(input: {
   }
 
   if (skippedInvalidDate > 0) {
-    console.warn(
-      `[ecommerce-sync] skipped ${skippedInvalidDate} orders with invalid placedAt (provider=${input.provider} workspaceId=${input.workspaceId})`,
-    );
+    const message = `[ecommerce-sync] skipped ${skippedInvalidDate} orders with invalid placedAt (provider=${input.provider} workspaceId=${input.workspaceId})`;
+    console.warn(message);
+    // Surface as a Sentry metric instead of a silent console.warn so recurring
+    // date-skip regressions are observable.
+    Sentry.captureMessage(message, "warning");
   }
 
-  return ingestedOrders;
+  return { ingestedOrders, skippedInvalidDate };
 }
 
 /** Upserts the per-day dailyMetric rollup for the given orders (set semantics
@@ -323,7 +377,7 @@ async function persistEcommerceOrders(input: {
   provider: ConnectorProvider;
   orders: ShopifyOrder[];
 }) {
-  const ingestedOrders = await persistOrdersOnly(input);
+  const { ingestedOrders } = await persistOrdersOnly(input);
   await writeDailyMetricsFromOrders({ ...input, orders: ingestedOrders });
 }
 
@@ -343,14 +397,16 @@ async function recomputeEcommerceDailyMetricsFromDb(input: {
   since: string;
   until: string;
 }) {
+  const gte = asDateOnly(input.since);
+  // until is the window's last day; cover the whole day (lt next day).
+  const lt = new Date(asDateOnly(input.until).getTime() + 24 * 60 * 60 * 1000);
   const rows = await prisma.ecommerceOrder.findMany({
     where: {
       connectorAccountId: input.connectorAccountId,
-      placedAt: {
-        gte: asDateOnly(input.since),
-        // until is the window's last day; cover the whole day (lt next day).
-        lt: new Date(asDateOnly(input.until).getTime() + 24 * 60 * 60 * 1000),
-      },
+      OR: [
+        { orderCreatedAt: { gte, lt } },
+        { orderCreatedAt: null, placedAt: { gte, lt } },
+      ],
     },
     select: {
       externalOrderId: true,
@@ -358,6 +414,7 @@ async function recomputeEcommerceDailyMetricsFromDb(input: {
       itemsCount: true,
       status: true,
       placedAt: true,
+      orderCreatedAt: true,
     },
   });
 
@@ -370,6 +427,9 @@ async function recomputeEcommerceDailyMetricsFromDb(input: {
     itemsCount: row.itemsCount,
     status: row.status,
     placedAt: row.placedAt.toISOString(),
+    orderCreatedAt: row.orderCreatedAt
+      ? row.orderCreatedAt.toISOString()
+      : null,
   }));
 
   await writeDailyMetricsFromOrders({
@@ -486,6 +546,8 @@ async function loadOrdersForConnector(input: {
         until: input.range.until,
         deadlineMs: input.deadlineMs,
         startPage,
+        dateField: input.range.dateField,
+        paidOnly: input.range.paidOnly,
         onPage: async (pageOrders) => {
           await persistOrdersOnly({
             workspaceId: connector.workspaceId,
@@ -579,7 +641,18 @@ async function loadOrdersForConnector(input: {
         );
       }
       const refreshClient = new MercadoLivreClient({ config });
-      const refreshed = await refreshClient.refreshAccessToken(refreshToken);
+      // A refresh failure is tagged so the outer handler can distinguish a dead
+      // grant (→ TOKEN_EXPIRED, needs reconnect) from a transient token-endpoint
+      // blip (→ keep ACTIVE, retry next run).
+      let refreshed;
+      try {
+        refreshed = await refreshClient.refreshAccessToken(refreshToken);
+      } catch (refreshErr: unknown) {
+        throw new ConnectorRefreshError(
+          isAuthFatalError(refreshErr),
+          refreshErr,
+        );
+      }
       const credentialFields = await vaultCredentialFields({
         workspaceId: connector.workspaceId,
         provider: ConnectorProvider.MERCADO_LIVRE,
@@ -726,10 +799,20 @@ async function loadOrdersForConnector(input: {
         );
       }
       const refreshClient = new ShopeeClient({ config });
-      const refreshed = await refreshClient.refreshAccessToken({
-        refreshToken,
-        shopId,
-      });
+      // See the Mercado Livre block: tag refresh failures so a dead grant maps
+      // to TOKEN_EXPIRED while a transient blip keeps the connection ACTIVE.
+      let refreshed;
+      try {
+        refreshed = await refreshClient.refreshAccessToken({
+          refreshToken,
+          shopId,
+        });
+      } catch (refreshErr: unknown) {
+        throw new ConnectorRefreshError(
+          isAuthFatalError(refreshErr),
+          refreshErr,
+        );
+      }
       const credentialFields = await vaultCredentialFields({
         workspaceId: connector.workspaceId,
         provider: ConnectorProvider.SHOPEE,
@@ -1141,10 +1224,25 @@ export async function syncEcommerceOrders(input: {
     const message =
       caught instanceof Error ? caught.message : "Unknown ecommerce sync error";
 
+    // Only a dead grant (auth_fatal) downgrades the connection to TOKEN_EXPIRED.
+    // Transient failures leave the status untouched (stays ACTIVE) so a network
+    // blip / provider 5xx never makes the connection "drop"; the cron retries it
+    // next run. Unknown errors fall back to ERROR, which the cron also retries.
+    let failureKind = classifyConnectorSyncError(caught);
+    // Single-use refresh-token race: if a concurrent refresh already rotated the
+    // token, the invalid_grant we caught is a false alarm — keep the connection.
+    if (
+      failureKind === "auth_fatal" &&
+      !(await grantStillDeadAfterRecheck(input.connectorAccountId))
+    ) {
+      failureKind = "transient";
+    }
+    const failureStatus = statusForSyncFailure(failureKind);
+
     await prisma.connectorAccount.update({
       where: { id: input.connectorAccountId },
       data: {
-        status: ConnectorStatus.ERROR,
+        ...(failureStatus ? { status: failureStatus } : {}),
         lastSyncError: message,
       },
     });

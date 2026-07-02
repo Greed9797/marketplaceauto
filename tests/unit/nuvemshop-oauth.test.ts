@@ -102,4 +102,59 @@ describe("Nuvemshop OAuth", () => {
     const secondUrl = new URL(String(fetchMock.mock.calls[1][0]));
     expect(secondUrl.searchParams.get("page")).toBe("2");
   });
+
+  it("captures order created_at as orderCreatedAt, independent of placedAt", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      Response.json([
+        {
+          id: 1,
+          total: "100.00",
+          total_paid: "100.00",
+          payment_status: "paid",
+          // Created in June, paid in July — the exact reconciliation case.
+          created_at: "2026-06-15T10:00:00Z",
+          paid_at: "2026-07-02T09:00:00Z",
+        },
+      ]),
+    );
+    const client = new NuvemshopClient({
+      config,
+      fetchImpl: fetchMock as unknown as typeof fetch,
+    });
+
+    const result = await client.listOrders({
+      storeId: "2093261",
+      accessToken: "store-token",
+      since: "2026-06-01",
+      until: "2026-06-30",
+    });
+
+    expect(result.orders[0].orderCreatedAt).toBe("2026-06-15T10:00:00.000Z");
+    // placedAt still follows the paid_at → completed_at → created_at chain.
+    expect(result.orders[0].placedAt).toBe("2026-07-02T09:00:00.000Z");
+  });
+
+  it("filters by updated_at with status=any when incremental", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(Response.json([]));
+    const client = new NuvemshopClient({
+      config,
+      fetchImpl: fetchMock as unknown as typeof fetch,
+    });
+
+    await client.listOrders({
+      storeId: "2093261",
+      accessToken: "store-token",
+      since: "2026-06-01",
+      until: "2026-06-30",
+      dateField: "updated_at",
+      paidOnly: false,
+    });
+
+    const url = new URL(String(fetchMock.mock.calls[0][0]));
+    expect(url.searchParams.get("updated_at_min")).toBe("2026-06-01T00:00:00Z");
+    expect(url.searchParams.get("updated_at_max")).toBe("2026-06-30T23:59:59Z");
+    expect(url.searchParams.get("status")).toBe("any");
+    expect(url.searchParams.has("payment_status")).toBe(false);
+    expect(url.searchParams.has("created_at_min")).toBe(false);
+  });
 });

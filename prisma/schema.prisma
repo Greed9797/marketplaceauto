@@ -333,12 +333,18 @@ model EcommerceOrder {
   utmMedium          String?
   utmCampaign        String?
   placedAt           DateTime
+  // Order CREATION timestamp from the source platform (NuvemShop order.created_at).
+  // Revenue is bucketed by this date to match the store's own revenue report.
+  // Nullable + backward-compatible: legacy rows stay NULL until re-backfilled and
+  // the aggregator falls back to placedAt while NULL.
+  orderCreatedAt     DateTime?
   createdAt          DateTime             @default(now())
   items              EcommerceOrderItem[]
 
   @@unique([connectorAccountId, externalOrderId])
   @@index([workspaceId, placedAt])
   @@index([workspaceId, platform, placedAt])
+  @@index([workspaceId, platform, orderCreatedAt])
 }
 
 model EcommerceOrderItem {

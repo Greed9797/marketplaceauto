@@ -6,6 +6,10 @@
     {
       "path": "/api/cron/workspace-sync",
       "schedule": "0 6 * * *"
+    },
+    {
+      "path": "/api/cron/token-keepalive",
+      "schedule": "0 1,4,7,10,13,16,19,22 * * *"
     }
   ]
 }
