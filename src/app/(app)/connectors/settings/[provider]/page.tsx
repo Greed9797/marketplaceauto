@@ -392,6 +392,64 @@ function ProviderSpecificFields({
     );
   }
 
+  if (provider === ConnectorProvider.MERCADO_LIVRE) {
+    return (
+      <>
+        <Field
+          name="clientId"
+          label="Mercado Livre App ID (Client ID)"
+          defaultValue={publicCredential(config, "clientId")}
+          required
+        />
+        <SecretField
+          name="clientSecret"
+          label="Mercado Livre Client Secret"
+          configured={hasSecret(config, "clientSecret")}
+        />
+        <Field
+          name="redirectUri"
+          label="Redirect URI"
+          defaultValue={config?.redirectUri}
+          placeholder="preenchido automaticamente ao salvar"
+        />
+        <Field
+          name="baseUrl"
+          label="Base URL API"
+          defaultValue={config?.baseUrl ?? "https://api.mercadolibre.com"}
+        />
+      </>
+    );
+  }
+
+  if (provider === ConnectorProvider.SHOPEE) {
+    return (
+      <>
+        <Field
+          name="partnerId"
+          label="Shopee Partner ID"
+          defaultValue={publicCredential(config, "partnerId")}
+          required
+        />
+        <SecretField
+          name="partnerKey"
+          label="Shopee Partner Key (assinatura HMAC)"
+          configured={hasSecret(config, "partnerKey")}
+        />
+        <Field
+          name="redirectUri"
+          label="Redirect URI"
+          defaultValue={config?.redirectUri}
+          placeholder="preenchido automaticamente ao salvar"
+        />
+        <Field
+          name="baseUrl"
+          label="Host da API"
+          defaultValue={config?.baseUrl ?? "https://partner.shopeemobile.com"}
+        />
+      </>
+    );
+  }
+
   if (isManualCommerceProvider(provider)) {
     if (provider === ConnectorProvider.ISET) {
       return (

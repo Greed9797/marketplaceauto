@@ -45,6 +45,7 @@ function providerConfigFromFormData(formData: FormData): ProviderConfigInput {
     "leadEventId",
     "scheduledEventId",
     "shopDomain",
+    "partnerId",
   ]) {
     const value = getString(formData, key);
     if (value) publicCredentials[key] = value;
@@ -66,6 +67,7 @@ function providerConfigFromFormData(formData: FormData): ProviderConfigInput {
     "apiSecret",
     "apiUser",
     "apiPassword",
+    "partnerKey",
   ]) {
     const value = getString(formData, key);
     if (value) secrets[key] = value;
@@ -98,6 +100,8 @@ export async function saveProviderConfigAction(formData: FormData) {
     [ConnectorProvider.GA4]: "/api/connectors/google-analytics/callback",
     [ConnectorProvider.META_ADS]: "/api/connectors/meta/callback",
     [ConnectorProvider.NUVEMSHOP]: "/api/connectors/nuvemshop/callback",
+    [ConnectorProvider.MERCADO_LIVRE]: "/api/connectors/mercado-livre/callback",
+    [ConnectorProvider.SHOPEE]: "/api/connectors/shopee/callback",
   };
   const autoCallbackPath = autoRedirectProviders[config.provider];
   if (autoCallbackPath && !config.redirectUri) {
