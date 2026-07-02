@@ -234,6 +234,44 @@ function normalizeItems(value: unknown) {
   });
 }
 
+// Magazord v2 (`/api/v2/site/pedido`) stamps dates as "YYYY-MM-DD HH:mm:ss-03"
+// (space separator, offset without minutes) — Date.parse rejects it, so convert
+// to ISO here or every Magazord order is skipped by the parsePlacedAt guard.
+function magazordIsoDate(value: unknown) {
+  if (typeof value !== "string" || !value.trim()) {
+    return undefined;
+  }
+  let candidate = value.trim().replace(" ", "T");
+  if (/[+-]\d{2}$/.test(candidate)) {
+    candidate += ":00";
+  }
+  const ms = Date.parse(candidate);
+  return Number.isFinite(ms) ? new Date(ms).toISOString() : undefined;
+}
+
+// Magazord situação -> canonical status. `pedidoSituacaoTipo` 3 = cancelado;
+// everything past payment approval (Transporte, Entregue, Crédito Aprovado…)
+// counts as paid — Magazord only advances an order after payment clears.
+// Validated against the live distribution of the Br Artes store.
+function magazordStatusLabel(payload: ManualCommerceOrderPayload) {
+  const desc = payload.pedidoSituacaoDescricao;
+  const tipo = payload.pedidoSituacaoTipo;
+  if (desc === undefined && tipo === undefined) {
+    return undefined;
+  }
+  const label = String(desc ?? "").toLowerCase();
+  if (Number(tipo) === 3 || label.includes("cancel")) {
+    return "cancelled";
+  }
+  if (/devolvid|estorn|reembols|chargeback/.test(label)) {
+    return "refunded";
+  }
+  if (/aguardando|pendente|pending|análise|analise/.test(label)) {
+    return "pending";
+  }
+  return "paid";
+}
+
 export function normalizeManualCommerceOrder(
   payload: ManualCommerceOrderPayload,
 ): ShopifyOrder {
@@ -257,6 +295,8 @@ export function normalizeManualCommerceOrder(
 
   const placedAt =
     firstString(
+      // Magazord order date (converted to ISO — see magazordIsoDate).
+      magazordIsoDate(payload.dataHora),
       payload.created_at,
       payload.data,
       payload.data_pedido,
@@ -291,11 +331,15 @@ export function normalizeManualCommerceOrder(
       payload.pedido,
       payload.number,
       payload.order_number,
+      // Magazord: `codigo` is the human-facing order number.
+      payload.codigo,
     ),
     orderTotal:
       normalizeMoney(
         firstString(
           moneyFromMaybeObject(payload.valor_total),
+          // Magazord v2: valorTotal = produto + frete − desconto + acréscimo.
+          payload.valorTotal,
           payload.total,
           payload.total_price,
           payload.valor,
@@ -316,6 +360,8 @@ export function normalizeManualCommerceOrder(
     items,
     status:
       firstString(
+        // Magazord situação (pedidoSituacaoTipo/Descricao) → canonical status.
+        magazordStatusLabel(payload),
         // Loja Integrada situacao FK (code/URI) → PT term. Wins over the raw
         // `payload.situacao` (which may be a non-matching URI string).
         lojaIntegradaSituacaoLabel(payload.situacao),
