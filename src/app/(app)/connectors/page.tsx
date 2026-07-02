@@ -16,6 +16,7 @@ import { ProviderLogo } from "@/components/providers/provider-logo";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getCurrentUserContext } from "@/lib/auth/current";
+import { resolveAppOrigin } from "@/lib/auth/origin";
 import {
   canDeleteWorkspaceConnectors,
   canManageProviderConfigs,
@@ -25,6 +26,8 @@ import {
   isHiddenProvider,
   MARKETPLACE_FIRST,
 } from "@/lib/connectors/marketplace-first";
+import { getGlobalMercadoLivreConfig } from "@/lib/connectors/mercado-livre/global-config";
+import { getGlobalShopeeConfig } from "@/lib/connectors/shopee/global-config";
 import { listPublicProviderConfigs } from "@/lib/connectors/provider-config";
 import {
   getConnectorDefinition,
@@ -264,6 +267,17 @@ export default async function ConnectorsPage({
     if (config.status === "ACTIVE") {
       providerConfigs.add(config.provider);
     }
+  }
+
+  // Credenciais do "app oficial W3" via env também contam como configuradas:
+  // o connect flow usa esse fallback quando o workspace não tem ProviderConfig,
+  // então o card deve oferecer "Conectar" direto em vez de forçar o formulário.
+  const appOrigin = await resolveAppOrigin();
+  if (getGlobalMercadoLivreConfig(appOrigin)) {
+    providerConfigs.add(ConnectorProvider.MERCADO_LIVRE);
+  }
+  if (getGlobalShopeeConfig(appOrigin)) {
+    providerConfigs.add(ConnectorProvider.SHOPEE);
   }
 
   const metaAccounts = connectorCounts.get(ConnectorProvider.META_ADS) ?? 0;
