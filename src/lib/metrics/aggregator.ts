@@ -311,8 +311,8 @@ function orderCount(order: DashboardOrderRow) {
   return 1;
 }
 
-function approvedOrderCount(order: DashboardOrderRow) {
-  return isApprovedOrderStatus(order.status, order.platform)
+function approvedOrderCount(order: DashboardOrderRow, includeAll = false) {
+  return includeAll || isApprovedOrderStatus(order.status, order.platform)
     ? orderCount(order)
     : 0;
 }
@@ -413,8 +413,21 @@ export function buildDashboardSnapshot(input: {
   }[];
   trafficProviders?: ConnectorProvider[];
   commerceProviders?: ConnectorProvider[];
+  /**
+   * Quando true, conta TODOS os pedidos (qualquer status, inclusive
+   * cancelado/em aberto/estornado) na receita e na contagem — modo "ver todos"
+   * do dashboard, pra bater 1:1 com ERPs que somam tudo. Default (false) mantém
+   * só aprovado/pago, que é a receita real.
+   */
+  includeAllStatuses?: boolean;
 }): DashboardSnapshot {
   const { period } = input;
+  const includeAllStatuses = input.includeAllStatuses ?? false;
+  // Predicado de "conta como receita": no modo todos, tudo conta.
+  const approves = (
+    status: string | null | undefined,
+    platform: ConnectorProvider,
+  ) => includeAllStatuses || isApprovedOrderStatus(status, platform);
   // Product catalog (stock + category) synced from the workspace's store
   // connectors. Keyed by SKU (preferred — survives "Produto - VARIANTE" name
   // drift) and by normalized name (fallback). Used to fill the products table's
@@ -538,7 +551,9 @@ export function buildDashboardSnapshot(input: {
       // without their own status — count them unless the status is explicitly a
       // non-approved (pending / cancelled / refunded) term. Orders themselves
       // keep the stricter "must be approved" rule (see revenue below).
-      (item.status == null || isApprovedOrderStatus(item.status)),
+      (includeAllStatuses ||
+        item.status == null ||
+        isApprovedOrderStatus(item.status)),
   );
   const currentOrders = filteredOrders.filter((order) =>
     isWithinBrt(orderRevenueDate(order), period.from, period.to),
@@ -566,18 +581,12 @@ export function buildDashboardSnapshot(input: {
   // the customer sees in their financial panel.
   const revenue = currentOrders.reduce(
     (sum, order) =>
-      sum +
-      (isApprovedOrderStatus(order.status, order.platform)
-        ? asNumber(order.orderTotal)
-        : 0),
+      sum + (approves(order.status, order.platform) ? asNumber(order.orderTotal) : 0),
     0,
   );
   const previousRevenue = previousOrders.reduce(
     (sum, order) =>
-      sum +
-      (isApprovedOrderStatus(order.status, order.platform)
-        ? asNumber(order.orderTotal)
-        : 0),
+      sum + (approves(order.status, order.platform) ? asNumber(order.orderTotal) : 0),
     0,
   );
   const spend = currentMetrics.reduce(
@@ -622,11 +631,11 @@ export function buildDashboardSnapshot(input: {
   const roas = calculateRoas(revenue, spend);
   const previousRoas = calculateRoas(previousRevenue, previousSpend);
   const approvedOrders = currentOrders.reduce(
-    (sum, order) => sum + approvedOrderCount(order),
+    (sum, order) => sum + approvedOrderCount(order, includeAllStatuses),
     0,
   );
   const previousApprovedOrders = previousOrders.reduce(
-    (sum, order) => sum + approvedOrderCount(order),
+    (sum, order) => sum + approvedOrderCount(order, includeAllStatuses),
     0,
   );
   const orders = approvedOrders;
@@ -682,10 +691,10 @@ export function buildDashboardSnapshot(input: {
   for (const order of currentOrders) {
     const item = daily.get(brtDateKey(orderRevenueDate(order)));
     if (item) {
-      const approved = approvedOrderCount(order);
-      // Same rule as the headline revenue: only paid orders count toward the
-      // daily revenue series so the line chart matches the KPI total.
-      if (isApprovedOrderStatus(order.status, order.platform)) {
+      const approved = approvedOrderCount(order, includeAllStatuses);
+      // Same rule as the headline revenue: paid orders (ou todos, no modo
+      // "ver todos") contam na série diária pra bater com o KPI total.
+      if (approves(order.status, order.platform)) {
         item.revenue += asNumber(order.orderTotal);
       }
       item.orders += approved;
@@ -732,8 +741,8 @@ export function buildDashboardSnapshot(input: {
     );
     const item = currentKey ? daily.get(currentKey) : null;
     if (item) {
-      const approved = approvedOrderCount(order);
-      if (isApprovedOrderStatus(order.status, order.platform)) {
+      const approved = approvedOrderCount(order, includeAllStatuses);
+      if (approves(order.status, order.platform)) {
         item.previousRevenue += asNumber(order.orderTotal);
       }
       item.previousOrders += approved;
@@ -875,7 +884,7 @@ export function buildDashboardSnapshot(input: {
   >();
 
   for (const order of currentOrders) {
-    const approved = isApprovedOrderStatus(order.status, order.platform);
+    const approved = approves(order.status, order.platform);
     const approvedCount = approved ? orderCount(order) : 0;
     const orderTotal = asNumber(order.orderTotal);
     const revenueContribution = approved ? orderTotal : 0;
@@ -1146,6 +1155,7 @@ export async function getDashboardSnapshot(input: {
   period: DashboardPeriod;
   trafficProviders?: ConnectorProvider[];
   commerceProviders?: ConnectorProvider[];
+  includeAllStatuses?: boolean;
 }): Promise<DashboardSnapshot> {
   const trafficProviders = input.trafficProviders ?? [
     ...dashboardTrafficProviders,
@@ -1243,6 +1253,7 @@ export async function getDashboardSnapshot(input: {
       inventory,
       trafficProviders,
       commerceProviders,
+      includeAllStatuses: input.includeAllStatuses ?? false,
     });
   } catch (error: unknown) {
     const code =

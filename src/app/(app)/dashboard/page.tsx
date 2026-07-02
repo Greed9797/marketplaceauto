@@ -25,6 +25,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getCurrentUserContext } from "@/lib/auth/current";
 import { MARKETPLACE_FIRST } from "@/lib/connectors/marketplace-first";
+import { cn } from "@/lib/utils/cn";
 import { getDashboardSnapshot } from "@/lib/metrics/aggregator";
 import { getDashboardFilters } from "@/lib/metrics/period";
 import {
@@ -55,9 +56,27 @@ export default async function DashboardPage({
   const filters = getDashboardFilters(params);
   const { period } = filters;
   const showComparison = filters.comparisonEnabled;
+  // Toggle de status: "todos" soma qualquer pedido (inclusive cancelado/em
+  // aberto), pra bater 1:1 com ERPs; default "pagos" = só receita aprovada.
+  const statusParam = Array.isArray(params.status)
+    ? params.status[0]
+    : params.status;
+  const includeAllStatuses = statusParam === "all";
+  const statusHref = (mode: "paid" | "all") => {
+    const next = new URLSearchParams();
+    for (const [key, value] of Object.entries(params)) {
+      if (key === "status") continue;
+      if (Array.isArray(value)) value.forEach((v) => next.append(key, v));
+      else if (value != null) next.set(key, value);
+    }
+    if (mode === "all") next.set("status", "all");
+    const qs = next.toString();
+    return qs ? `/dashboard?${qs}` : "/dashboard";
+  };
   const snapshot = await getDashboardSnapshot({
     workspaceId: context.currentWorkspace.id,
     period,
+    includeAllStatuses,
   });
 
   const empty = !snapshot.hasData;
@@ -106,8 +125,38 @@ export default async function DashboardPage({
   return (
     <div className="space-y-5">
       <DashboardAutoRefresh />
-      <section>
+      <section className="flex flex-wrap items-center justify-between gap-3">
         <DashboardFilterBar filters={filters} showProviderFilters={false} />
+        <div
+          className="inline-flex overflow-hidden rounded-lg border border-[var(--border)]"
+          role="group"
+          aria-label="Filtro de status dos pedidos"
+        >
+          <a
+            href={statusHref("paid")}
+            aria-pressed={!includeAllStatuses}
+            className={cn(
+              "px-3 py-1.5 text-sm font-medium transition-colors",
+              !includeAllStatuses
+                ? "bg-[var(--w3-red)] text-white"
+                : "text-[var(--text-secondary)] hover:bg-[var(--bg-muted)]",
+            )}
+          >
+            Só pagos
+          </a>
+          <a
+            href={statusHref("all")}
+            aria-pressed={includeAllStatuses}
+            className={cn(
+              "px-3 py-1.5 text-sm font-medium transition-colors",
+              includeAllStatuses
+                ? "bg-[var(--w3-red)] text-white"
+                : "text-[var(--text-secondary)] hover:bg-[var(--bg-muted)]",
+            )}
+          >
+            Todos os status
+          </a>
+        </div>
       </section>
 
       {snapshot.fetchError ? (
