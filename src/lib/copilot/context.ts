@@ -67,7 +67,13 @@ export async function buildCopilotSystem(input: {
     `- Preço: ${Number(produto.preco)} | Estoque: ${produto.quantidade}`,
     `- Categoria ML: ${produto.categoriaMlId ?? "(auto)"} | Categoria Shopee: ${produto.categoriaShopeeId ?? "(vazia)"}`,
     `- Peso: ${produto.pesoGramas ?? "?"}g | Dim: ${produto.comprimentoCm ?? "?"}x${produto.larguraCm ?? "?"}x${produto.alturaCm ?? "?"}cm`,
-    `- Ficha: ${atributos && Object.keys(atributos).length ? Object.entries(atributos).map(([k, v]) => `${k}=${v}`).join("; ") : "(vazia)"}`,
+    `- Ficha: ${
+      atributos && Object.keys(atributos).length
+        ? Object.entries(atributos)
+            .map(([k, v]) => `${k}=${v}`)
+            .join("; ")
+        : "(vazia)"
+    }`,
     "",
     "PENDÊNCIAS DE PUBLICAÇÃO:",
     pendencias("Mercado Livre", ml),

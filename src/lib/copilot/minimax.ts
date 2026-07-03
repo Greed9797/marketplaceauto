@@ -84,8 +84,10 @@ export async function minimaxChat(input: {
   const message =
     isRecord(choice) && isRecord(choice.message) ? choice.message : null;
 
-  const content =
+  const rawContent =
     message && typeof message.content === "string" ? message.content : "";
+  // M3 embute o raciocínio em <think>…</think> — remove antes de exibir.
+  const content = rawContent.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
   const toolCalls =
     message && Array.isArray(message.tool_calls)
       ? (message.tool_calls as MiniMaxToolCall[])

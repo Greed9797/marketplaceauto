@@ -237,9 +237,7 @@ export function CopilotFab() {
                                 : "text-xs text-[var(--danger)]"
                             }
                           >
-                            {applied.ok ? (
-                              <Check className="size-3" />
-                            ) : null}
+                            {applied.ok ? <Check className="size-3" /> : null}
                             {applied.text}
                           </p>
                         ) : (
