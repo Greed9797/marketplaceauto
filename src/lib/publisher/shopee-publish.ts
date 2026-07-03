@@ -24,7 +24,7 @@ import { getShopeeEnvConfig } from "./shopee-env-config";
  */
 const TOKEN_REFRESH_SKEW_SECONDS = 1800;
 
-type ShopeeResolvedToken = {
+export type ShopeeResolvedToken = {
   accessToken: string;
   shopId: number;
 };
@@ -204,7 +204,7 @@ export function buildShopeeAddItemPayload(input: {
  * expiry, reusing the shared vault envelope. Writing back to one store fixes the
  * refresh-token invalidation caused by the previous dual-store design.
  */
-async function resolveShopeeToken(input: {
+export async function resolveShopeeToken(input: {
   config: ShopeeConfig;
   account: ConnectorAccount;
 }): Promise<ShopeeResolvedToken> {
@@ -318,13 +318,22 @@ export async function publishProdutoToShopee(input: {
       throw new Error("Nenhuma logística Shopee ativa encontrada.");
     }
 
+    // Galeria completa (capa primeiro), cap de 9 (limite da Shopee).
+    const galeria = Array.from(
+      new Set(
+        [
+          ...(produto.fotoUrl ? [produto.fotoUrl] : []),
+          ...(produto.imagens ?? []),
+        ].filter(Boolean),
+      ),
+    ).slice(0, 9);
     const imageIds: string[] = [];
-    if (produto.fotoUrl) {
+    for (const imageUrl of galeria) {
       const imageId = await uploadShopeeImage({
         config,
         accessToken,
         shopId,
-        imageUrl: produto.fotoUrl,
+        imageUrl,
       });
       if (imageId) imageIds.push(imageId);
     }

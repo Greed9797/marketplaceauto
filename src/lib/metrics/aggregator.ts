@@ -581,12 +581,14 @@ export function buildDashboardSnapshot(input: {
   // the customer sees in their financial panel.
   const revenue = currentOrders.reduce(
     (sum, order) =>
-      sum + (approves(order.status, order.platform) ? asNumber(order.orderTotal) : 0),
+      sum +
+      (approves(order.status, order.platform) ? asNumber(order.orderTotal) : 0),
     0,
   );
   const previousRevenue = previousOrders.reduce(
     (sum, order) =>
-      sum + (approves(order.status, order.platform) ? asNumber(order.orderTotal) : 0),
+      sum +
+      (approves(order.status, order.platform) ? asNumber(order.orderTotal) : 0),
     0,
   );
   const spend = currentMetrics.reduce(

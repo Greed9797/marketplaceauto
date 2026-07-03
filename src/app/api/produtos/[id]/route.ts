@@ -4,6 +4,7 @@ import { z } from "zod";
 
 import { isNextControlFlowError } from "@/lib/connectors/oauth-route-error";
 import { prisma } from "@/lib/db/prisma";
+import { calcularScore } from "@/lib/publisher/listing-score";
 import {
   requireProdutoInWorkspace,
   requirePublisherWorkspace,
@@ -27,6 +28,7 @@ const updateProdutoSchema = z.object({
   quantidade: z.coerce.number().int().positive().default(1),
   condicao: z.enum(["new", "used", "not_specified"]).default("not_specified"),
   atributos: z.record(z.string(), z.unknown()).optional().nullable(),
+  imagens: z.array(z.string().url()).optional(),
 });
 
 export async function PUT(request: NextRequest, context: RouteContext) {
@@ -53,11 +55,35 @@ export async function PUT(request: NextRequest, context: RouteContext) {
       );
     }
 
+    // Galeria atual (para o score) quando o payload não a envia.
+    const current = await prisma.produto.findUnique({
+      where: { id: produto.produtoId },
+      select: { imagens: true },
+    });
+    const imagens = parsed.data.imagens ?? current?.imagens ?? [];
+    const capa =
+      parsed.data.fotoUrl ?? (imagens.length > 0 ? imagens[0] : null);
+
+    // Score recalculado no save (determinístico).
+    const { score, breakdown } = calcularScore({
+      tituloMl: parsed.data.tituloMl,
+      tituloShopee: parsed.data.tituloShopee,
+      descricao: parsed.data.descricao,
+      imagens,
+      fotoUrl: capa,
+      atributos: parsed.data.atributos,
+      categoriaMlId: parsed.data.categoriaMlId,
+      categoriaShopeeId: parsed.data.categoriaShopeeId,
+      preco: parsed.data.preco,
+      quantidade: parsed.data.quantidade,
+    });
+
     const updated = await prisma.produto.update({
       where: { id: produto.produtoId },
       data: {
         nomeOriginal: parsed.data.nomeOriginal,
-        fotoUrl: parsed.data.fotoUrl ?? null,
+        fotoUrl: capa,
+        ...(parsed.data.imagens ? { imagens: parsed.data.imagens } : {}),
         tituloMl: parsed.data.tituloMl ?? null,
         tituloShopee: parsed.data.tituloShopee ?? null,
         descricao: parsed.data.descricao ?? null,
@@ -69,6 +95,8 @@ export async function PUT(request: NextRequest, context: RouteContext) {
         atributos:
           (parsed.data.atributos as Prisma.InputJsonValue | undefined) ??
           undefined,
+        score,
+        scoreBreakdown: breakdown as unknown as Prisma.InputJsonValue,
       },
     });
 

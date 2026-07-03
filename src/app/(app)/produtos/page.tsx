@@ -9,7 +9,11 @@ import { prisma } from "@/lib/db/prisma";
 import { statusTone } from "@/lib/publisher/status-display";
 import { formatCurrencyBR } from "@/lib/utils/format-br";
 
-import { ProdutoRowActions, ProdutosFilter } from "./produtos-client";
+import {
+  ImportarAnunciosButton,
+  ProdutoRowActions,
+  ProdutosFilter,
+} from "./produtos-client";
 
 export const dynamic = "force-dynamic";
 
@@ -50,6 +54,7 @@ export default async function ProdutosPage({
       nomeOriginal: true,
       fotoUrl: true,
       status: true,
+      score: true,
       preco: true,
       cliente: { select: { nome: true } },
     },
@@ -76,7 +81,10 @@ export default async function ProdutosPage({
       </div>
 
       {clientes.length > 0 ? (
-        <ProdutosFilter clientes={clientes} selected={scopedClienteId ?? ""} />
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <ProdutosFilter clientes={clientes} selected={scopedClienteId ?? ""} />
+          <ImportarAnunciosButton clienteId={scopedClienteId} />
+        </div>
       ) : null}
 
       {clientes.length === 0 ? (
@@ -148,10 +156,28 @@ export default async function ProdutosPage({
                       <Badge tone={statusTone(produto.status)}>
                         {produto.status}
                       </Badge>
+                      {produto.score !== null ? (
+                        <Badge
+                          tone={
+                            produto.score >= 80
+                              ? "success"
+                              : produto.score >= 50
+                                ? "warning"
+                                : "danger"
+                          }
+                        >
+                          Score {produto.score}
+                        </Badge>
+                      ) : null}
                     </div>
                   </div>
                 </div>
                 <div className="flex flex-wrap items-center justify-end gap-2 sm:flex-nowrap">
+                  <Button asChild size="sm">
+                    <Link href={`/produtos/${produto.id}/otimizar`}>
+                      Otimizar
+                    </Link>
+                  </Button>
                   <Button asChild size="sm" variant="secondary">
                     <Link href={`/produtos/${produto.id}/editar`}>Editar</Link>
                   </Button>

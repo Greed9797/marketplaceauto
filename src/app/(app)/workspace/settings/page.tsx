@@ -1,9 +1,12 @@
 import type { MemberRole } from "@prisma/client";
 
 import {
+  clearAiKeyAction,
   createWorkspaceAction,
+  saveAiKeyAction,
   updateWorkspaceSettingsAction,
 } from "@/app/(app)/actions";
+import { hasWorkspaceAiKey } from "@/lib/publisher/ai-key";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -46,6 +49,7 @@ export default async function WorkspaceSettingsPage({
   const canEditWorkspace =
     isMaster || canManageWorkspaceSettings(context.currentMembership.role);
   const canCreateNewWorkspace = canCreateWorkspace(context.user);
+  const aiKeyConfigured = await hasWorkspaceAiKey(context.currentWorkspace.id);
 
   return (
     <div className="space-y-6">
@@ -76,6 +80,19 @@ export default async function WorkspaceSettingsPage({
       {params.deleted ? (
         <p className="rounded-md bg-[var(--success-bg)] px-4 py-3 text-sm text-[var(--success)]">
           Workspace excluído.
+        </p>
+      ) : null}
+      {params.aikey === "saved" ? (
+        <p className="rounded-md bg-[var(--success-bg)] px-4 py-3 text-sm text-[var(--success)]">
+          Chave de IA salva.
+        </p>
+      ) : params.aikey === "removed" ? (
+        <p className="rounded-md bg-[var(--success-bg)] px-4 py-3 text-sm text-[var(--success)]">
+          Chave de IA removida.
+        </p>
+      ) : params.error === "invalid-aikey" ? (
+        <p className="rounded-md bg-[var(--danger-bg)] px-4 py-3 text-sm text-[var(--danger)]">
+          Informe uma chave de IA válida.
         </p>
       ) : null}
       {params.error === "confirm-mismatch" ? (
@@ -182,6 +199,59 @@ export default async function WorkspaceSettingsPage({
           </CardContent>
         </Card>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Inteligência artificial (sua chave)</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="max-w-2xl text-sm leading-6 text-[var(--text-secondary)]">
+            Cadastre a sua chave do Google Gemini para gerar títulos, descrições,
+            preencher a ficha técnica e criar imagens dos anúncios. A chave fica
+            criptografada no cofre e nunca é exibida de volta. Pegue em{" "}
+            <span className="font-mono">aistudio.google.com/apikey</span>.
+          </p>
+          {aiKeyConfigured ? (
+            <p className="inline-flex items-center gap-2 rounded-md bg-[var(--success-bg)] px-3 py-1.5 text-sm text-[var(--success)]">
+              Chave configurada ✓
+            </p>
+          ) : (
+            <p className="inline-flex items-center gap-2 rounded-md bg-[var(--warning-bg)] px-3 py-1.5 text-sm text-[var(--warning)]">
+              Nenhuma chave própria — usando a chave padrão do sistema (se houver).
+            </p>
+          )}
+          {canEditWorkspace ? (
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+              <form
+                action={saveAiKeyAction}
+                className="grid flex-1 gap-4 sm:grid-cols-[1fr_auto]"
+              >
+                <Input
+                  label="Chave Gemini"
+                  name="aiKey"
+                  placeholder={aiKeyConfigured ? "•••••••• (substituir)" : "AIza..."}
+                  required
+                  type="password"
+                />
+                <Button className="self-end" type="submit" variant="secondary">
+                  {aiKeyConfigured ? "Atualizar chave" : "Salvar chave"}
+                </Button>
+              </form>
+              {aiKeyConfigured ? (
+                <form action={clearAiKeyAction} className="self-end">
+                  <Button type="submit" variant="ghost">
+                    Remover
+                  </Button>
+                </form>
+              ) : null}
+            </div>
+          ) : (
+            <p className="rounded-md bg-[var(--warning-bg)] px-4 py-3 text-sm text-[var(--warning)]">
+              Apenas Owner e Admin configuram a chave de IA.
+            </p>
+          )}
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader className="flex-row items-center justify-between">

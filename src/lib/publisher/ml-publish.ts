@@ -175,12 +175,20 @@ export function buildMlItemPayload(input: {
   pictureIds: string[];
 }): Record<string, unknown> {
   const { produto } = input;
+  // Galeria completa: todas as imagens do produto como `source` (capa primeiro).
+  // Fallback pro fotoUrl único; pictureIds explícitos vencem.
+  const galeria = Array.from(
+    new Set(
+      [
+        ...(produto.fotoUrl ? [produto.fotoUrl] : []),
+        ...(produto.imagens ?? []),
+      ].filter(Boolean),
+    ),
+  );
   const pictures =
     input.pictureIds.length > 0
       ? input.pictureIds.map((id) => ({ id }))
-      : produto.fotoUrl
-        ? [{ source: produto.fotoUrl }]
-        : [];
+      : galeria.map((source) => ({ source }));
 
   return {
     title: (produto.tituloMl ?? produto.nomeOriginal).slice(0, 60),
@@ -203,7 +211,7 @@ export function buildMlItemPayload(input: {
  * back onto the SAME account) via `MercadoLivreClient` when near expiry. Writing
  * back to one store fixes the refresh-token invalidation of the old dual store.
  */
-async function resolveMlToken(input: {
+export async function resolveMlToken(input: {
   config: MercadoLivreConfig;
   account: ConnectorAccount;
 }): Promise<string> {

@@ -1,4 +1,5 @@
 import type { InventoryRow } from "@/lib/connectors/inventory";
+import type { ListingDetail } from "@/lib/connectors/listing-detail";
 import { callWithRetry } from "@/lib/connectors/retry";
 import type { ShopifyOrder } from "@/lib/connectors/shopify/client";
 import { redirectSafeFetch } from "@/lib/connectors/url-guard";
@@ -530,10 +531,11 @@ export class MercadoLivreClient {
    * /items?ids= (máx 20, available_quantity REAL só com o token do seller),
    * nome da categoria via /categories/{id} (público, cacheado por execução).
    */
-  async listInventory(input: {
+  /** Todos os item ids do seller via scan/scroll_id (cap de segurança). */
+  async listSellerItemIds(input: {
     sellerId: string;
     accessToken: string;
-  }): Promise<InventoryRow[]> {
+  }): Promise<string[]> {
     const itemIds: string[] = [];
     let scrollId: string | null = null;
     for (let page = 0; page < ML_INVENTORY_MAX_PAGES; page += 1) {
@@ -557,7 +559,14 @@ export class MercadoLivreClient {
       if (ids.length === 0 || !response.scroll_id) break;
       scrollId = response.scroll_id;
     }
+    return itemIds;
+  }
 
+  async listInventory(input: {
+    sellerId: string;
+    accessToken: string;
+  }): Promise<InventoryRow[]> {
+    const itemIds = await this.listSellerItemIds(input);
     if (itemIds.length === 0) return [];
 
     const categoryCache = new Map<string, string | null>();
@@ -591,6 +600,66 @@ export class MercadoLivreClient {
     }
 
     return rows;
+  }
+
+  /**
+   * Detalhe completo dos anúncios (imagens + ficha técnica + descrição) para
+   * importar/otimizar. Multiget /items (batches de 20) com attributes expandido
+   * + GET /items/{id}/description por item. Erros por item são ignorados (best-
+   * effort), não derrubam o import.
+   */
+  async fetchListingDetails(input: {
+    itemIds: string[];
+    accessToken: string;
+  }): Promise<ListingDetail[]> {
+    const out: ListingDetail[] = [];
+    for (const batch of chunkArray(input.itemIds, ML_ITEMS_MULTIGET_SIZE)) {
+      const url = new URL(`${this.apiBaseUrl}/items`);
+      url.searchParams.set("ids", batch.join(","));
+      url.searchParams.set(
+        "attributes",
+        "id,title,pictures,attributes,category_id,price,available_quantity,status",
+      );
+      const response = await callWithRetry(() =>
+        fetchJson<MercadoLivreItemsDetailMultiget>(url, this.fetchImpl, {
+          headers: { Authorization: `Bearer ${input.accessToken}` },
+          signal: AbortSignal.timeout(15_000),
+        }),
+      );
+      for (const entry of response ?? []) {
+        if (entry?.code !== 200 || !entry.body?.id) continue;
+        const id = String(entry.body.id);
+        const description = await this.fetchItemDescription(
+          id,
+          input.accessToken,
+        );
+        out.push(normalizeMercadoLivreListing(entry.body, description));
+      }
+      await sleep(MERCADO_LIVRE_PAGE_THROTTLE_MS);
+    }
+    return out;
+  }
+
+  /** Texto da descrição de um item (GET /items/{id}/description), ou null. */
+  private async fetchItemDescription(
+    itemId: string,
+    accessToken: string,
+  ): Promise<string | null> {
+    try {
+      const response = await callWithRetry(() =>
+        fetchJson<{ plain_text?: string | null; text?: string | null }>(
+          new URL(`${this.apiBaseUrl}/items/${itemId}/description`),
+          this.fetchImpl,
+          {
+            headers: { Authorization: `Bearer ${accessToken}` },
+            signal: AbortSignal.timeout(15_000),
+          },
+        ),
+      );
+      return response.plain_text?.trim() || response.text?.trim() || null;
+    } catch {
+      return null; // descrição é enriquecimento, nunca derruba o import
+    }
   }
 
   /**
@@ -723,6 +792,48 @@ type MercadoLivreItemsMultigetResponse = Array<{
   code?: number | null;
   body?: MercadoLivreItemBodyPayload | null;
 } | null> | null;
+
+type MercadoLivreListingBody = MercadoLivreItemBodyPayload & {
+  price?: number | string | null;
+  pictures?: Array<{ secure_url?: string | null; url?: string | null } | null> | null;
+  attributes?: Array<{
+    name?: string | null;
+    value_name?: string | null;
+  } | null> | null;
+};
+
+type MercadoLivreItemsDetailMultiget = Array<{
+  code?: number | null;
+  body?: MercadoLivreListingBody | null;
+} | null> | null;
+
+/** Item ML (multiget expandido) + descrição → ListingDetail canônico. */
+export function normalizeMercadoLivreListing(
+  body: MercadoLivreListingBody,
+  description: string | null,
+): ListingDetail {
+  const images = (body.pictures ?? [])
+    .map((p) => p?.secure_url?.trim() || p?.url?.trim() || null)
+    .filter((url): url is string => Boolean(url));
+  const attributes: Record<string, string> = {};
+  for (const attr of body.attributes ?? []) {
+    const name = attr?.name?.trim();
+    const value = attr?.value_name?.trim();
+    if (name && value) attributes[name] = value;
+  }
+  const price = Number(body.price);
+  const quantity = Number(body.available_quantity);
+  return {
+    externalId: String(body.id),
+    title: body.title?.trim() || null,
+    description,
+    categoryId: body.category_id?.trim() || null,
+    price: Number.isFinite(price) ? price : null,
+    availableQuantity: Number.isFinite(quantity) ? quantity : null,
+    images,
+    attributes,
+  };
+}
 
 /** Item do multiget /items → InventoryRow (puro, testável; categoria à parte). */
 export function normalizeMercadoLivreInventoryItem(

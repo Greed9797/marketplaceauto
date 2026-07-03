@@ -1,4 +1,5 @@
 import type { InventoryRow } from "@/lib/connectors/inventory";
+import type { ListingDetail } from "@/lib/connectors/listing-detail";
 import { callWithRetry } from "@/lib/connectors/retry";
 import type { ShopifyOrder } from "@/lib/connectors/shopify/client";
 import { redirectSafeFetch } from "@/lib/connectors/url-guard";
@@ -560,10 +561,11 @@ export class ShopeeClient {
    * get_item_base_info detalha em lotes de 50 (o array de ids casa com o
    * page_size), e get_category (1 chamada, árvore inteira) resolve o nome.
    */
-  async listInventory(input: {
+  /** Todos os item ids ativos da loja (get_item_list paginado por offset). */
+  async listShopItemIds(input: {
     shopId: number;
     accessToken: string;
-  }): Promise<InventoryRow[]> {
+  }): Promise<number[]> {
     const itemIds: number[] = [];
     let offset = 0;
     for (let page = 0; page < SHOPEE_MAX_PAGES_PER_WINDOW; page += 1) {
@@ -589,7 +591,14 @@ export class ShopeeClient {
       offset = next;
       await sleep(SHOPEE_REQUEST_THROTTLE_MS);
     }
+    return itemIds;
+  }
 
+  async listInventory(input: {
+    shopId: number;
+    accessToken: string;
+  }): Promise<InventoryRow[]> {
+    const itemIds = await this.listShopItemIds(input);
     if (itemIds.length === 0) return [];
 
     const categoryNames = await this.fetchCategoryNames(input);
@@ -610,6 +619,39 @@ export class ShopeeClient {
     }
 
     return rows;
+  }
+
+  /**
+   * Detalhe completo dos anúncios (imagens + ficha técnica + descrição) para
+   * importar/otimizar. get_item_base_info já traz image/description/attributes
+   * — só tipamos os campos extras. Lotes de 50; nome da categoria resolvido pela
+   * árvore (get_category), 1 chamada.
+   */
+  async fetchListingDetails(input: {
+    shopId: number;
+    accessToken: string;
+    itemIds: number[];
+  }): Promise<ListingDetail[]> {
+    if (input.itemIds.length === 0) return [];
+    const out: ListingDetail[] = [];
+    for (const batch of chunks(input.itemIds, SHOPEE_ITEM_BATCH_SIZE)) {
+      const response = await this.shopGet<ShopeeItemDetailResponse>({
+        apiPath: "/api/v2/product/get_item_base_info",
+        params: {
+          item_id_list: batch.join(","),
+          need_complaint_policy: "false",
+          need_tax_info: "false",
+        },
+        accessToken: input.accessToken,
+        shopId: input.shopId,
+      });
+      for (const item of response.response?.item_list ?? []) {
+        if (!item?.item_id) continue;
+        out.push(normalizeShopeeListing(item));
+      }
+      await sleep(SHOPEE_REQUEST_THROTTLE_MS);
+    }
+    return out;
   }
 
   /** Árvore inteira de categorias em 1 chamada → mapa id → nome exibível. */
@@ -679,6 +721,60 @@ type ShopeeCategoryResponse = ShopeeErrorEnvelope & {
     } | null> | null;
   };
 };
+
+type ShopeeItemDetailPayload = ShopeeItemBaseInfoPayload & {
+  description?: string | null;
+  image?: { image_url_list?: Array<string | null> | null } | null;
+  price_info?: Array<{
+    current_price?: number | string | null;
+    original_price?: number | string | null;
+  } | null> | null;
+  attribute_list?: Array<{
+    original_attribute_name?: string | null;
+    attribute_name?: string | null;
+    attribute_value_list?: Array<{
+      original_value_name?: string | null;
+      value_name?: string | null;
+    } | null> | null;
+  } | null> | null;
+};
+
+type ShopeeItemDetailResponse = ShopeeErrorEnvelope & {
+  response?: { item_list?: Array<ShopeeItemDetailPayload | null> | null };
+};
+
+/** Item Shopee (get_item_base_info expandido) → ListingDetail canônico. */
+export function normalizeShopeeListing(
+  item: ShopeeItemDetailPayload,
+): ListingDetail {
+  const images = (item.image?.image_url_list ?? [])
+    .map((url) => url?.trim() || null)
+    .filter((url): url is string => Boolean(url));
+  const attributes: Record<string, string> = {};
+  for (const attr of item.attribute_list ?? []) {
+    const name =
+      attr?.original_attribute_name?.trim() || attr?.attribute_name?.trim();
+    const value =
+      attr?.attribute_value_list?.[0]?.value_name?.trim() ||
+      attr?.attribute_value_list?.[0]?.original_value_name?.trim();
+    if (name && value) attributes[name] = value;
+  }
+  const price = Number(
+    item.price_info?.[0]?.current_price ?? item.price_info?.[0]?.original_price,
+  );
+  const stock = Number(item.stock_info_v2?.summary_info?.total_available_stock);
+  const categoryId = Number(item.category_id);
+  return {
+    externalId: String(item.item_id),
+    title: item.item_name?.trim() || null,
+    description: item.description?.trim() || null,
+    categoryId: Number.isFinite(categoryId) ? String(categoryId) : null,
+    price: Number.isFinite(price) ? price : null,
+    availableQuantity: Number.isFinite(stock) ? stock : null,
+    images,
+    attributes,
+  };
+}
 
 /** Item do get_item_base_info → InventoryRow (puro, testável). */
 export function normalizeShopeeInventoryItem(

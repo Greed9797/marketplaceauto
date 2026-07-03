@@ -1,12 +1,101 @@
 "use client";
 
-import { Loader2, Send, Trash2 } from "lucide-react";
+import { Download, Loader2, Send, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 
 import { Button } from "@/components/ui/button";
 
 type ClienteOption = { id: string; nome: string };
+
+/**
+ * Importa os anúncios existentes do cliente selecionado (Shopee/ML) para
+ * Produtos. Habilitado só com um cliente escolhido no filtro.
+ */
+export function ImportarAnunciosButton({
+  clienteId,
+}: {
+  clienteId: string | null;
+}) {
+  const router = useRouter();
+  const [loading, setLoading] = useState<"MERCADO_LIVRE" | "SHOPEE" | null>(null);
+  const [msg, setMsg] = useState<string | null>(null);
+  const [, startTransition] = useTransition();
+
+  async function importar(plataforma: "MERCADO_LIVRE" | "SHOPEE") {
+    if (!clienteId) return;
+    setMsg(null);
+    setLoading(plataforma);
+    try {
+      const response = await fetch("/api/produtos/importar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ clienteId, plataforma }),
+      });
+      const data = (await response.json().catch(() => null)) as {
+        success?: boolean;
+        error?: string;
+        data?: { imported?: number };
+      } | null;
+      if (!response.ok || !data?.success) {
+        setMsg(data?.error ?? "Falha ao importar");
+        return;
+      }
+      setMsg(`${data.data?.imported ?? 0} anúncio(s) importado(s)`);
+      startTransition(() => router.refresh());
+    } catch {
+      setMsg("Falha ao importar");
+    } finally {
+      setLoading(null);
+    }
+  }
+
+  if (!clienteId) {
+    return (
+      <p className="text-xs text-[var(--text-tertiary)]">
+        Selecione um cliente para importar os anúncios dele.
+      </p>
+    );
+  }
+
+  return (
+    <div className="flex flex-col items-start gap-1.5">
+      <div className="flex flex-wrap items-center gap-2">
+        <Button
+          disabled={loading !== null}
+          onClick={() => importar("MERCADO_LIVRE")}
+          size="sm"
+          type="button"
+          variant="secondary"
+        >
+          {loading === "MERCADO_LIVRE" ? (
+            <Loader2 aria-hidden className="size-3.5 animate-spin" />
+          ) : (
+            <Download aria-hidden className="size-3.5" />
+          )}
+          Importar do Mercado Livre
+        </Button>
+        <Button
+          disabled={loading !== null}
+          onClick={() => importar("SHOPEE")}
+          size="sm"
+          type="button"
+          variant="secondary"
+        >
+          {loading === "SHOPEE" ? (
+            <Loader2 aria-hidden className="size-3.5 animate-spin" />
+          ) : (
+            <Download aria-hidden className="size-3.5" />
+          )}
+          Importar da Shopee
+        </Button>
+      </div>
+      {msg ? (
+        <p className="text-xs text-[var(--text-secondary)]">{msg}</p>
+      ) : null}
+    </div>
+  );
+}
 
 /** Cliente filter that navigates to /produtos?clienteId=… on change. */
 export function ProdutosFilter({

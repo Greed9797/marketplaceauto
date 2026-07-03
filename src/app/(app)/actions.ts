@@ -32,10 +32,44 @@ import {
   isInternalW3User,
 } from "@/lib/auth/platform-permissions";
 import { prisma } from "@/lib/db/prisma";
+import {
+  clearWorkspaceAiKey,
+  saveWorkspaceAiKey,
+} from "@/lib/publisher/ai-key";
 
 function getString(formData: FormData, key: string) {
   const value = formData.get(key);
   return typeof value === "string" ? value : "";
+}
+
+/** Autoriza gerenciar settings do workspace ATIVO (OWNER/ADMIN ou Master). */
+async function assertCanEditActiveWorkspace() {
+  const context = await getCurrentUserContext();
+  const authorized =
+    isAdminMaster(context.user) ||
+    canManageWorkspaceSettings(context.currentMembership.role);
+  if (!authorized) {
+    redirect("/workspace/settings?error=forbidden");
+  }
+  return context.currentWorkspace.id;
+}
+
+/** Salva a chave Gemini BYOK do workspace ativo (Vault). */
+export async function saveAiKeyAction(formData: FormData) {
+  const workspaceId = await assertCanEditActiveWorkspace();
+  const apiKey = getString(formData, "aiKey").trim();
+  if (!apiKey) {
+    redirect("/workspace/settings?error=invalid-aikey");
+  }
+  await saveWorkspaceAiKey({ workspaceId, apiKey });
+  redirect("/workspace/settings?aikey=saved");
+}
+
+/** Remove a chave BYOK do workspace ativo (volta pro fallback global). */
+export async function clearAiKeyAction() {
+  const workspaceId = await assertCanEditActiveWorkspace();
+  await clearWorkspaceAiKey(workspaceId);
+  redirect("/workspace/settings?aikey=removed");
 }
 
 /**

@@ -2,16 +2,12 @@ import { ConnectorProvider } from "@prisma/client";
 import { describe, expect, test } from "vitest";
 
 import { buildDashboardSnapshot } from "@/lib/metrics/aggregator";
+import { getDashboardPeriod } from "@/lib/metrics/period";
 
-const period = {
-  preset: "custom" as const,
-  from: new Date("2026-06-25T00:00:00.000Z"),
-  to: new Date("2026-07-01T00:00:00.000Z"),
-  comparison: {
-    from: new Date("2026-06-18T00:00:00.000Z"),
-    to: new Date("2026-06-24T00:00:00.000Z"),
-  },
-};
+const period = getDashboardPeriod(
+  { period: "custom", from: "2026-06-25", to: "2026-07-01" },
+  new Date("2026-07-02T12:00:00.000Z"),
+);
 
 function order(status: string, total: string) {
   return {

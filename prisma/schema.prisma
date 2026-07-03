@@ -102,6 +102,7 @@ model Workspace {
   syncState                WorkspaceSyncState?
   accountReviewSessions    AccountReviewSession[]
   clientes                 Cliente[]
+  aiConfig                 WorkspaceAiConfig?
 }
 
 model WorkspaceSyncState {
@@ -572,7 +573,16 @@ model Produto {
   cliente           Cliente      @relation(fields: [clienteId], references: [id], onDelete: Cascade)
   nomeOriginal      String
   fotoUrl           String?
+  /// Galeria de imagens (capa = fotoUrl ou imagens[0]). URLs remotas do
+  /// marketplace (importadas) ou públicas do bucket `produtos` (upload/IA).
+  imagens           String[]     @default([])
   status            String       @default("rascunho")
+  /// Score de qualidade do anúncio 0-100 (listing-score.ts, determinístico).
+  score             Int?
+  /// Detalhamento por critério do score: [{criterio, pontos, max, dica}].
+  scoreBreakdown    Json?
+  /// Origem do produto: manual | importado_ml | importado_shopee.
+  origem            String       @default("manual")
   tituloMl          String?
   tituloShopee      String?
   descricao         String?
@@ -591,6 +601,21 @@ model Produto {
   publicacoes       Publicacao[]
 
   @@index([clienteId])
+}
+
+/// Config de IA BYOK por workspace: o OWNER/ADMIN cadastra a própria chave
+/// (Gemini) para gerar copy e imagens. A chave em si NUNCA fica aqui — só o
+/// `keySecretId` (ponteiro pro SecretStore/Vault). Sem linha = usa a chave
+/// global de ambiente (GEMINI_API_KEY) como fallback.
+model WorkspaceAiConfig {
+  id          String    @id @default(cuid())
+  workspaceId String    @unique
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  provider    String    @default("gemini")
+  model       String?
+  keySecretId String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 }
 
 /// An audit row for a single publish attempt of a `Produto` on one platform.

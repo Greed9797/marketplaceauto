@@ -129,11 +129,16 @@ export async function gerarCopy(input: {
     "nicho" | "estiloDescricao" | "exemplosTitulos" | "exemplosDescricoes"
   >;
   produto: Pick<Produto, "nomeOriginal">;
+  /** Chave BYOK do workspace (resolveAiKey). Sem ela, cai no env global. */
+  apiKey?: string | null;
+  /** Imagem do produto (base64 sem prefixo data:) para prompt multimodal. */
+  imagemBase64?: string | null;
+  imagemMimeType?: string | null;
 }): Promise<GeneratedCopy> {
-  const apiKey = process.env.GEMINI_API_KEY;
+  const apiKey = input.apiKey?.trim() || process.env.GEMINI_API_KEY;
   if (!apiKey) {
     throw new Error(
-      "GEMINI_API_KEY não configurada — defina a chave para gerar anúncios com IA.",
+      "Chave de IA não configurada — cadastre sua chave Gemini em Configurações.",
     );
   }
 
@@ -145,11 +150,24 @@ export async function gerarCopy(input: {
     exemplosDescricoes: parseExemplos(input.cliente.exemplosDescricoes),
   });
 
+  // Multimodal: quando há imagem, envia foto + texto (Gemini Flash é
+  // multimodal) para enriquecer título/descrição/atributos com o que aparece
+  // na foto. Sem imagem, é texto puro como antes.
+  const parts: Array<Record<string, unknown>> = [{ text: prompt }];
+  if (input.imagemBase64) {
+    parts.push({
+      inlineData: {
+        mimeType: input.imagemMimeType || "image/jpeg",
+        data: input.imagemBase64,
+      },
+    });
+  }
+
   const response = await fetch(`${GEMINI_ENDPOINT}?key=${apiKey}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      contents: [{ parts: [{ text: prompt }] }],
+      contents: [{ parts }],
     }),
     signal: AbortSignal.timeout(30_000),
   });
