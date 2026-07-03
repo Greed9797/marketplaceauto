@@ -2,8 +2,12 @@
 
 import {
   CheckCircle2,
+  FileText,
+  Gauge,
   ImagePlus,
+  ListChecks,
   Loader2,
+  Package,
   Rocket,
   Save,
   Sparkles,
@@ -85,6 +89,12 @@ function scoreColor(score: number): string {
   return "var(--danger)";
 }
 
+function scoreVerdict(score: number): string {
+  if (score >= 80) return "Ótimo";
+  if (score >= 50) return "Melhorar";
+  return "Incompleto";
+}
+
 /** Anel de progresso 0-100. */
 function ScoreGauge({ score }: { score: number }) {
   const radius = 52;
@@ -116,11 +126,14 @@ function ScoreGauge({ score }: { score: number }) {
         />
       </svg>
       <div className="absolute grid place-items-center text-center">
-        <span className="text-3xl font-bold" style={{ color }}>
+        <span className="text-3xl font-bold leading-none" style={{ color }}>
           {score}
         </span>
-        <span className="text-[0.625rem] uppercase tracking-wide text-[var(--text-tertiary)]">
-          / 100
+        <span
+          className="mt-1 text-[0.625rem] font-semibold uppercase tracking-wide"
+          style={{ color }}
+        >
+          {scoreVerdict(score)}
         </span>
       </div>
     </div>
@@ -128,7 +141,7 @@ function ScoreGauge({ score }: { score: number }) {
 }
 
 const inputCls =
-  "h-10 w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-surface)] px-3.5 text-sm text-[var(--text-primary)] outline-none focus:border-[var(--w3-red)] focus:ring-[3px] focus:ring-[var(--w3-red-bg)]";
+  "h-10 w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-3.5 text-sm text-[var(--text-primary)] outline-none transition-colors placeholder:text-[var(--text-tertiary)] hover:border-[var(--border-strong)] focus:border-[var(--w3-red)] focus:bg-[var(--bg-surface)] focus:ring-[3px] focus:ring-[var(--w3-red-bg)]";
 
 export function OtimizarClient({
   produtoId,
@@ -492,7 +505,10 @@ export function OtimizarClient({
         {/* Galeria */}
         <Card>
           <CardHeader className="flex-row items-center justify-between">
-            <CardTitle>Imagens ({state.imagens.length})</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <ImagePlus className="size-4 text-[var(--text-tertiary)]" />
+              Imagens ({state.imagens.length})
+            </CardTitle>
             <Button
               disabled={generatingImage}
               onClick={gerarImagem}
@@ -567,7 +583,10 @@ export function OtimizarClient({
         {/* Conteúdo */}
         <Card>
           <CardHeader className="flex-row items-center justify-between">
-            <CardTitle>Conteúdo do anúncio</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <FileText className="size-4 text-[var(--text-tertiary)]" />
+              Conteúdo do anúncio
+            </CardTitle>
             <Button
               disabled={generatingCopy}
               onClick={gerarCopy}
@@ -681,7 +700,10 @@ export function OtimizarClient({
         {/* Ficha técnica dirigida pelos atributos obrigatórios */}
         <Card>
           <CardHeader>
-            <CardTitle>Ficha técnica</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <ListChecks className="size-4 text-[var(--text-tertiary)]" />
+              Ficha técnica
+            </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             {requiredAttrs.length > 0 ? (
@@ -749,7 +771,10 @@ export function OtimizarClient({
         {/* Embalagem (Shopee exige) */}
         <Card>
           <CardHeader>
-            <CardTitle>Embalagem</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <Package className="size-4 text-[var(--text-tertiary)]" />
+              Embalagem
+            </CardTitle>
           </CardHeader>
           <CardContent className="grid gap-4 sm:grid-cols-4">
             <label className="grid gap-1.5">
@@ -822,7 +847,10 @@ export function OtimizarClient({
       <div className="space-y-4">
         <Card className="xl:sticky xl:top-4">
           <CardHeader>
-            <CardTitle>Score do anúncio</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <Gauge className="size-4 text-[var(--text-tertiary)]" />
+              Score do anúncio
+            </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid place-items-center">
@@ -882,7 +910,10 @@ export function OtimizarClient({
         {/* Otimização automática (eval harness M3) */}
         <Card>
           <CardHeader>
-            <CardTitle>Otimizar com IA (auto)</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <Wand2 className="size-4 text-[var(--w3-red)]" />
+              Otimizar com IA (auto)
+            </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             <p className="text-caption text-[var(--text-tertiary)]">
@@ -942,7 +973,10 @@ export function OtimizarClient({
         {/* Publicar */}
         <Card>
           <CardHeader>
-            <CardTitle>Publicar</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <Rocket className="size-4 text-[var(--w3-red)]" />
+              Publicar
+            </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             {preview ? (
