@@ -102,15 +102,15 @@ function ScoreGauge({ score }: { score: number }) {
   const offset = circumference * (1 - Math.min(100, Math.max(0, score)) / 100);
   const color = scoreColor(score);
   return (
-    <div className="relative grid size-32 place-items-center">
-      <svg className="size-32 -rotate-90" viewBox="0 0 120 120">
+    <div className="relative grid size-40 place-items-center">
+      <svg className="size-40 -rotate-90" viewBox="0 0 120 120">
         <circle
           cx="60"
           cy="60"
           r={radius}
           fill="none"
           stroke="var(--border-subtle)"
-          strokeWidth="10"
+          strokeWidth="8"
         />
         <circle
           cx="60"
@@ -118,19 +118,22 @@ function ScoreGauge({ score }: { score: number }) {
           r={radius}
           fill="none"
           stroke={color}
-          strokeWidth="10"
+          strokeWidth="8"
           strokeLinecap="round"
           strokeDasharray={circumference}
           strokeDashoffset={offset}
-          style={{ transition: "stroke-dashoffset 0.4s ease" }}
+          style={{ transition: "stroke-dashoffset 0.5s cubic-bezier(0.22,1,0.36,1)" }}
         />
       </svg>
       <div className="absolute grid place-items-center text-center">
-        <span className="text-3xl font-bold leading-none" style={{ color }}>
+        <span
+          className="text-[3.25rem] font-bold leading-none tabular-nums"
+          style={{ color }}
+        >
           {score}
         </span>
         <span
-          className="mt-1 text-[0.625rem] font-semibold uppercase tracking-wide"
+          className="mt-1.5 text-xs font-semibold uppercase tracking-[0.14em]"
           style={{ color }}
         >
           {scoreVerdict(score)}
@@ -229,6 +232,21 @@ export function OtimizarClient({
       }),
     [state],
   );
+
+  // Prontidão de publicação — o foco decisivo do painel (pronto vs. ajustes).
+  const readiness = useMemo(() => {
+    if (!preview) return null;
+    const plats = [preview.ml, preview.shopee].filter((p) => p.connected);
+    if (plats.length === 0) return { connected: false, prontas: 0, pend: 0 };
+    const prontas = plats.filter(
+      (p) => p.alreadyPublished || p.validation.ok,
+    ).length;
+    const pend = plats.reduce(
+      (n, p) => n + (p.validation.ok ? 0 : p.validation.problemas.length),
+      0,
+    );
+    return { connected: true, prontas, pend };
+  }, [preview]);
 
   function patch(next: Partial<ProdutoState>) {
     setState((prev) => ({ ...prev, ...next }));
@@ -845,18 +863,52 @@ export function OtimizarClient({
 
       {/* Painel lateral */}
       <div className="space-y-4">
-        <Card className="xl:sticky xl:top-4">
+        <Card className="border-[var(--w3-red-bg)] shadow-sm ring-1 ring-[var(--w3-red-bg)] xl:sticky xl:top-4">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <Gauge className="size-4 text-[var(--text-tertiary)]" />
+              <Gauge className="size-4 text-[var(--w3-red)]" />
               Score do anúncio
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid place-items-center">
+            <div className="grid place-items-center pt-1">
               <ScoreGauge score={score} />
             </div>
-            <ul className="space-y-2">
+            {readiness ? (
+              <div
+                className="flex items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-semibold"
+                style={
+                  !readiness.connected
+                    ? {
+                        background: "var(--bg-canvas)",
+                        color: "var(--text-tertiary)",
+                      }
+                    : readiness.prontas > 0 && readiness.pend === 0
+                      ? {
+                          background: "var(--w3-red-bg)",
+                          color: "var(--success)",
+                        }
+                      : {
+                          background: "var(--bg-canvas)",
+                          color: "var(--warning)",
+                        }
+                }
+              >
+                {!readiness.connected ? (
+                  "Conecte uma loja para publicar"
+                ) : readiness.pend === 0 && readiness.prontas > 0 ? (
+                  <>
+                    <CheckCircle2 className="size-4" /> Pronto para publicar
+                  </>
+                ) : (
+                  <>
+                    <XCircle className="size-4" /> {readiness.pend} ajuste
+                    {readiness.pend === 1 ? "" : "s"} para publicar
+                  </>
+                )}
+              </div>
+            ) : null}
+            <ul className="space-y-2 border-t border-[var(--border-subtle)] pt-4">
               {breakdown.map((c) => (
                 <li key={c.criterio} className="text-sm">
                   <div className="flex items-center justify-between">
@@ -886,7 +938,7 @@ export function OtimizarClient({
               ))}
             </ul>
             <Button
-              className="w-full"
+              className="h-11 w-full text-[0.9rem] font-semibold"
               disabled={saving}
               onClick={() => void salvar()}
               type="button"
