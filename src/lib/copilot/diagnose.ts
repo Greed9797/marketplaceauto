@@ -73,8 +73,7 @@ export async function diagnoseWorkspace(
 
   for (const pub of publicacoes) {
     const friendly = humanizePublishError(pub.erroMensagem);
-    const plataforma =
-      pub.plataforma === "SHOPEE" ? "Shopee" : "Mercado Livre";
+    const plataforma = pub.plataforma === "SHOPEE" ? "Shopee" : "Mercado Livre";
     issues.push({
       id: `pub:${pub.id}`,
       severity: "error",
