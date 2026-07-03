@@ -116,14 +116,20 @@ export async function getFirstEnabledLogisticId(input: {
   if (!isRecord(data)) return null;
   const response = data.response;
   if (!isRecord(response)) return null;
-  const list = response.logistic_channel_list;
-  if (!Array.isArray(list)) return null;
+  // Shopee v2 usa `logistics_channel_list` (plural); alguns SDKs/versões
+  // documentam `logistic_channel_list` (singular). Aceita as duas grafias.
+  const list = Array.isArray(response.logistics_channel_list)
+    ? response.logistics_channel_list
+    : Array.isArray(response.logistic_channel_list)
+      ? response.logistic_channel_list
+      : null;
+  if (!list) return null;
 
   for (const channel of list) {
-    if (isRecord(channel) && channel.enabled === true) {
-      const id = channel.logistic_channel_id;
-      if (typeof id === "number") return id;
-    }
+    if (!isRecord(channel)) continue;
+    if (channel.enabled !== true) continue;
+    const id = channel.logistics_channel_id ?? channel.logistic_channel_id;
+    if (typeof id === "number") return id;
   }
 
   return null;
@@ -338,7 +344,10 @@ export async function publishProdutoToShopee(input: {
       shopId,
     });
     if (logisticId === null) {
-      throw new Error("Nenhuma logística Shopee ativa encontrada.");
+      throw new Error(
+        "Nenhum canal de envio (logística) habilitado na sua loja Shopee. " +
+          "Ative um método de envio em Shopee → Configurações de envio e tente de novo.",
+      );
     }
 
     // Galeria completa (capa primeiro), cap de 9 (limite da Shopee).
