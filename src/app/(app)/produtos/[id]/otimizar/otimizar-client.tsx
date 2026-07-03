@@ -144,6 +144,13 @@ export function OtimizarClient({ produtoId, clienteId, initial }: Props) {
   } | null>(null);
   const [publishing, setPublishing] = useState<"ml" | "shopee" | null>(null);
   const [confirm, setConfirm] = useState<"ml" | "shopee" | null>(null);
+  const [harnessRunning, setHarnessRunning] = useState(false);
+  const [harness, setHarness] = useState<{
+    rounds: { n: number; score: number; publicavel: boolean }[];
+    finalScore: number;
+    publicavel: boolean;
+    converged: boolean;
+  } | null>(null);
 
   // Atributos obrigatórios (dedup por nome) das duas plataformas conectadas.
   const requiredAttrs = useMemo<RequiredAttr[]>(() => {
@@ -413,6 +420,49 @@ export function OtimizarClient({ produtoId, clienteId, initial }: Props) {
       setError("Falha ao publicar");
     } finally {
       setPublishing(null);
+    }
+  }
+
+  async function otimizarAuto() {
+    setError(null);
+    setMsg(null);
+    setHarness(null);
+    // Salva o estado atual antes: o harness lê o produto do banco.
+    const saved = await salvar();
+    if (!saved) return;
+    setHarnessRunning(true);
+    try {
+      const response = await fetch("/api/copilot/harness", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ produtoId }),
+      });
+      const data = (await response.json().catch(() => null)) as {
+        success?: boolean;
+        error?: string;
+        data?: {
+          rounds: { n: number; score: number; publicavel: boolean }[];
+          finalScore: number;
+          publicavel: boolean;
+          converged: boolean;
+        };
+      } | null;
+      if (!response.ok || !data?.success || !data.data) {
+        setError(data?.error ?? "Falha na otimização automática");
+        return;
+      }
+      setHarness(data.data);
+      setMsg(
+        data.data.converged
+          ? "Otimização automática concluída — anúncio pronto."
+          : `Otimização parou em ${data.data.finalScore}/100. Revise as pendências.`,
+      );
+      router.refresh();
+      await carregarPreview();
+    } catch {
+      setError("Falha na otimização automática");
+    } finally {
+      setHarnessRunning(false);
     }
   }
 
@@ -805,6 +855,66 @@ export function OtimizarClient({ produtoId, clienteId, initial }: Props) {
             ) : null}
             {error ? (
               <p className="text-sm text-[var(--danger)]">{error}</p>
+            ) : null}
+          </CardContent>
+        </Card>
+
+        {/* Otimização automática (eval harness M3) */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Otimizar com IA (auto)</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <p className="text-caption text-[var(--text-tertiary)]">
+              O copiloto melhora o anúncio em rodadas até ficar publicável.
+              Aplica só conteúdo — não publica sozinho.
+            </p>
+            <Button
+              className="w-full"
+              disabled={harnessRunning}
+              onClick={() => void otimizarAuto()}
+              type="button"
+              variant="secondary"
+            >
+              {harnessRunning ? (
+                <Loader2 aria-hidden className="size-4 animate-spin" />
+              ) : (
+                <Wand2 aria-hidden className="size-4" />
+              )}
+              {harnessRunning ? "Otimizando…" : "Otimizar automaticamente"}
+            </Button>
+            {harness ? (
+              <ul className="space-y-1">
+                {harness.rounds.map((r) => (
+                  <li
+                    key={r.n}
+                    className="flex items-center justify-between text-xs text-[var(--text-tertiary)]"
+                  >
+                    <span>Rodada {r.n}</span>
+                    <span
+                      style={{
+                        color: r.publicavel
+                          ? "var(--success)"
+                          : "var(--text-secondary)",
+                      }}
+                    >
+                      {r.score}/100 {r.publicavel ? "· pronto" : ""}
+                    </span>
+                  </li>
+                ))}
+                <li className="flex items-center justify-between border-t border-[var(--border-subtle)] pt-1 text-xs font-medium">
+                  <span className="text-[var(--text-primary)]">Final</span>
+                  <span
+                    style={{
+                      color: harness.converged
+                        ? "var(--success)"
+                        : "var(--warning)",
+                    }}
+                  >
+                    {harness.finalScore}/100
+                  </span>
+                </li>
+              </ul>
             ) : null}
           </CardContent>
         </Card>
