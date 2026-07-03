@@ -53,8 +53,12 @@ describe("calcularScore", () => {
   });
 
   test("atributos parciais pontuam proporcional", () => {
-    const { breakdown } = calcularScore({ atributos: { marca: "W3", cor: "Azul" } });
-    expect(breakdown.find((c) => c.criterio === "Ficha técnica")?.pontos).toBe(8);
+    const { breakdown } = calcularScore({
+      atributos: { marca: "W3", cor: "Azul" },
+    });
+    expect(breakdown.find((c) => c.criterio === "Ficha técnica")?.pontos).toBe(
+      8,
+    );
   });
 
   test("categoria Shopee numérica conta", () => {

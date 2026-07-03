@@ -62,7 +62,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          error: "Configure sua chave Gemini em Configurações para gerar imagens.",
+          error:
+            "Configure sua chave Gemini em Configurações para gerar imagens.",
         },
         { status: 400 },
       );
@@ -108,6 +109,9 @@ export async function POST(request: NextRequest) {
     const message =
       error instanceof Error ? error.message : "Falha ao gerar imagem.";
     console.error(`[api/ai/gerar-imagem] failed: ${message}`);
-    return NextResponse.json({ success: false, error: message }, { status: 500 });
+    return NextResponse.json(
+      { success: false, error: message },
+      { status: 500 },
+    );
   }
 }

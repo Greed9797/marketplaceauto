@@ -42,6 +42,9 @@ export async function POST(request: NextRequest) {
   } catch (error: unknown) {
     const message =
       error instanceof Error ? error.message : "Falha ao importar anúncios.";
-    return NextResponse.json({ success: false, error: message }, { status: 400 });
+    return NextResponse.json(
+      { success: false, error: message },
+      { status: 400 },
+    );
   }
 }

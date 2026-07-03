@@ -11,11 +11,24 @@ import {
   connectorRefreshTokenFromAccount,
   vaultCredentialFields,
 } from "@/lib/connectors/credentials";
-import { MercadoLivreClient } from "@/lib/connectors/mercado-livre/client";
+import {
+  MercadoLivreClient,
+  type MercadoLivreCategoryAttribute,
+} from "@/lib/connectors/mercado-livre/client";
 import type { MercadoLivreConfig } from "@/lib/connectors/mercado-livre/oauth";
 import { prisma } from "@/lib/db/prisma";
 
+import {
+  buildMlAttributes,
+  type MlAttributePayload,
+} from "./attribute-payload";
+import {
+  normalizeMlAttributes,
+  type RequiredAttribute,
+} from "./category-attributes";
 import { getMlEnvConfig } from "./ml-env-config";
+import { humanizePublishError } from "./humanize-publish-error";
+import { validarPublicavel, type PublishPreview } from "./publish-validation";
 
 /** Refresh the ML token this many seconds before expiry (tokens live ~6h). */
 const TOKEN_REFRESH_SKEW_SECONDS = 1800;
@@ -173,6 +186,7 @@ export function buildMlItemPayload(input: {
   produto: Produto;
   categoryId: string;
   pictureIds: string[];
+  attributes?: MlAttributePayload[];
 }): Record<string, unknown> {
   const { produto } = input;
   // Galeria completa: todas as imagens do produto como `source` (capa primeiro).
@@ -201,7 +215,7 @@ export function buildMlItemPayload(input: {
     condition: produto.condicao,
     pictures,
     shipping: { mode: "me2", local_pick_up: false, free_shipping: false },
-    attributes: [],
+    attributes: input.attributes ?? [],
   };
 }
 
@@ -322,7 +336,41 @@ export async function publishProdutoToMl(input: {
       if (pictureId) pictureIds.push(pictureId);
     }
 
-    const payload = buildMlItemPayload({ produto, categoryId, pictureIds });
+    // Atributos obrigatórios da categoria → payload com value_id real.
+    let required: RequiredAttribute[] = [];
+    try {
+      const rawAttrs = (await mlRequest({
+        apiBaseUrl,
+        accessToken,
+        path: `/categories/${encodeURIComponent(categoryId)}/attributes`,
+      })) as MercadoLivreCategoryAttribute[];
+      required = normalizeMlAttributes(Array.isArray(rawAttrs) ? rawAttrs : []);
+    } catch {
+      // Sem atributos resolvidos, publica com o mínimo — ML rejeita se faltar
+      // obrigatório e o erro humanizado (Fase 1.6) aponta o que preencher.
+    }
+
+    // Gate: valida antes de disparar a API — evita o HTTP 400 cego.
+    const validation = validarPublicavel({ produto, platform: "ml", required });
+    if (!validation.ok) {
+      throw new Error(
+        `Anúncio incompleto: ${validation.problemas
+          .map((p) => p.mensagem)
+          .join(" ")}`,
+      );
+    }
+
+    const attributes: MlAttributePayload[] = buildMlAttributes({
+      atributos: produto.atributos as Record<string, string> | null,
+      required,
+    });
+
+    const payload = buildMlItemPayload({
+      produto,
+      categoryId,
+      pictureIds,
+      attributes,
+    });
     const item = await createMlItem({ apiBaseUrl, accessToken, payload });
 
     if (produto.descricao) {
@@ -360,6 +408,7 @@ export async function publishProdutoToMl(input: {
       error instanceof Error
         ? error.message
         : "Falha desconhecida ao publicar no Mercado Livre.";
+    const friendly = humanizePublishError(message);
 
     await prisma.$transaction([
       prisma.produto.update({
@@ -372,12 +421,79 @@ export async function publishProdutoToMl(input: {
           clienteId: input.clienteId,
           plataforma: "MERCADO_LIVRE",
           status: "erro",
-          erroMensagem: message,
-          respostaApi: { error: message },
+          erroMensagem: `${friendly.title} — ${friendly.action}`,
+          respostaApi: { error: message, detail: friendly.detail },
         },
       }),
     ]);
 
     throw error;
   }
+}
+
+/**
+ * Preview read-only para a UI (Fase 1.7): resolve token → categoria → atributos
+ * obrigatórios e roda o gate SEM publicar nem mutar o produto. Reusa os mesmos
+ * helpers do publish (sem drift). Se a conta não está conectada ou o env não tem
+ * credenciais, retorna `connected:false` e o resto vazio.
+ */
+export async function previewPublishMl(input: {
+  clienteId: string;
+  produto: Produto;
+}): Promise<PublishPreview> {
+  const empty: PublishPreview = {
+    platform: "ml",
+    connected: false,
+    categoryResolved: false,
+    alreadyPublished: Boolean(input.produto.mlItemId),
+    requiredAttributes: [],
+    validation: { ok: false, problemas: [] },
+  };
+
+  const config = getMlEnvConfig();
+  if (!config) return empty;
+
+  const account = await prisma.connectorAccount.findFirst({
+    where: {
+      clienteId: input.clienteId,
+      provider: ConnectorProvider.MERCADO_LIVRE,
+      status: ConnectorStatus.ACTIVE,
+    },
+  });
+  if (!account) return empty;
+
+  const accessToken = await resolveMlToken({ config, account });
+  const apiBaseUrl = config.apiBaseUrl;
+  const categoryId = await resolveMlCategoryId({
+    apiBaseUrl,
+    accessToken,
+    produto: input.produto,
+  });
+
+  let required: RequiredAttribute[] = [];
+  if (categoryId) {
+    try {
+      const rawAttrs = (await mlRequest({
+        apiBaseUrl,
+        accessToken,
+        path: `/categories/${encodeURIComponent(categoryId)}/attributes`,
+      })) as MercadoLivreCategoryAttribute[];
+      required = normalizeMlAttributes(Array.isArray(rawAttrs) ? rawAttrs : []);
+    } catch {
+      // idem publish: sem atributos, o gate reprova o que falta.
+    }
+  }
+
+  return {
+    platform: "ml",
+    connected: true,
+    categoryResolved: Boolean(categoryId),
+    alreadyPublished: Boolean(input.produto.mlItemId),
+    requiredAttributes: required,
+    validation: validarPublicavel({
+      produto: input.produto,
+      platform: "ml",
+      required,
+    }),
+  };
 }

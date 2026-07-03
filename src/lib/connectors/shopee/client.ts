@@ -275,6 +275,43 @@ function toUnixSeconds(isoDate: string, endOfDay: boolean): number {
   return Math.floor(Date.parse(`${isoDate.slice(0, 10)}${suffix}`) / 1000);
 }
 
+export type ShopeeCategorySuggestion = {
+  categoryId: number;
+  /** Reenviar em add_item p/ telemetria/aprovação da Shopee. */
+  dsCatRcmdId: string | null;
+};
+
+/** Shape cru de um atributo de categoria (product/get_attribute_tree). */
+export type ShopeeCategoryAttribute = {
+  attribute_id: number;
+  original_attribute_name: string;
+  display_attribute_name?: string | null;
+  is_mandatory: boolean;
+  input_validation_type?: string | null;
+  format_type?: string | null;
+  input_type?: string | null;
+  attribute_unit_list?: string[] | null;
+  attribute_value_list?: Array<{
+    value_id?: number | null;
+    original_value_name?: string | null;
+    display_value_name?: string | null;
+    value_unit?: string | null;
+  }> | null;
+};
+
+type ShopeeCategoryRecommendResponse = ShopeeErrorEnvelope & {
+  response?: {
+    category_id_list?: Array<number | string | null> | null;
+    ds_cat_rcmd_id?: string | null;
+  } | null;
+};
+
+type ShopeeAttributeTreeResponse = ShopeeErrorEnvelope & {
+  response?: {
+    attribute_list?: Array<Partial<ShopeeCategoryAttribute> | null> | null;
+  } | null;
+};
+
 export class ShopeeClient {
   private readonly config?: ShopeeConfig;
   private readonly fetchImpl: FetchLike;
@@ -680,6 +717,99 @@ export class ShopeeClient {
       console.warn(`[shopee] get_category falhou: ${message}`);
     }
     return names;
+  }
+
+  /** POST a shop-scoped endpoint (body em JSON, assinatura shop). */
+  private async shopPost<T extends ShopeeErrorEnvelope>(input: {
+    apiPath: string;
+    body: Record<string, unknown>;
+    accessToken: string;
+    shopId: number;
+  }): Promise<T> {
+    const config = this.requireConfig();
+    const timestamp = Math.floor(Date.now() / 1000);
+    const sign = signShopRequest({
+      partnerId: config.partnerId,
+      partnerKey: config.partnerKey,
+      apiPath: input.apiPath,
+      timestamp,
+      accessToken: input.accessToken,
+      shopId: input.shopId,
+    });
+    const url = new URL(`${config.host}${input.apiPath}`);
+    url.searchParams.set("partner_id", String(config.partnerId));
+    url.searchParams.set("timestamp", String(timestamp));
+    url.searchParams.set("sign", sign);
+    url.searchParams.set("access_token", input.accessToken);
+    url.searchParams.set("shop_id", String(input.shopId));
+
+    const result = await callWithRetry(() =>
+      fetchJson<T>(url, this.fetchImpl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify(input.body),
+        signal: AbortSignal.timeout(15_000),
+      }),
+    );
+    assertNoShopeeError(result);
+    return result;
+  }
+
+  /** Recomenda categoria (folha) a partir do nome do item. */
+  async recommendCategory(input: {
+    itemName: string;
+    accessToken: string;
+    shopId: number;
+  }): Promise<ShopeeCategorySuggestion | null> {
+    const itemName = input.itemName.trim();
+    if (!itemName) return null;
+    const response = await this.shopPost<ShopeeCategoryRecommendResponse>({
+      apiPath: "/api/v2/product/category_recommend",
+      body: { item_name: itemName },
+      accessToken: input.accessToken,
+      shopId: input.shopId,
+    });
+    const first = (response.response?.category_id_list ?? []).find((id) =>
+      Number.isFinite(Number(id)),
+    );
+    if (first == null) return null;
+    return {
+      categoryId: Number(first),
+      dsCatRcmdId: response.response?.ds_cat_rcmd_id?.trim() || null,
+    };
+  }
+
+  /** Atributos de uma categoria (product/get_attribute_tree). */
+  async fetchCategoryAttributes(input: {
+    categoryId: number;
+    accessToken: string;
+    shopId: number;
+  }): Promise<ShopeeCategoryAttribute[]> {
+    if (!Number.isFinite(input.categoryId)) return [];
+    const response = await this.shopPost<ShopeeAttributeTreeResponse>({
+      apiPath: "/api/v2/product/get_attribute_tree",
+      body: { category_id: input.categoryId, language: "pt-br" },
+      accessToken: input.accessToken,
+      shopId: input.shopId,
+    });
+    return (response.response?.attribute_list ?? [])
+      .filter((a): a is Partial<ShopeeCategoryAttribute> =>
+        Boolean(a && a.attribute_id != null),
+      )
+      .map((a) => ({
+        attribute_id: Number(a.attribute_id),
+        original_attribute_name: a.original_attribute_name?.trim() || "",
+        display_attribute_name: a.display_attribute_name?.trim() || null,
+        is_mandatory: a.is_mandatory === true,
+        input_validation_type: a.input_validation_type ?? null,
+        format_type: a.format_type ?? null,
+        input_type: a.input_type ?? null,
+        attribute_unit_list: a.attribute_unit_list ?? null,
+        attribute_value_list: a.attribute_value_list ?? null,
+      }));
   }
 }
 

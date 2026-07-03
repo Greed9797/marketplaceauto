@@ -12,7 +12,9 @@ function aiKeySecretName(workspaceId: string): string {
  * (GEMINI_API_KEY). Retorna null se nenhuma existir — o caller mostra erro
  * amigável pedindo pra configurar em Configurações.
  */
-export async function resolveAiKey(workspaceId: string): Promise<string | null> {
+export async function resolveAiKey(
+  workspaceId: string,
+): Promise<string | null> {
   const config = await prisma.workspaceAiConfig.findUnique({
     where: { workspaceId },
     select: { keySecretId: true },

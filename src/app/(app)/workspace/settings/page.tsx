@@ -206,9 +206,10 @@ export default async function WorkspaceSettingsPage({
         </CardHeader>
         <CardContent className="space-y-4">
           <p className="max-w-2xl text-sm leading-6 text-[var(--text-secondary)]">
-            Cadastre a sua chave do Google Gemini para gerar títulos, descrições,
-            preencher a ficha técnica e criar imagens dos anúncios. A chave fica
-            criptografada no cofre e nunca é exibida de volta. Pegue em{" "}
+            Cadastre a sua chave do Google Gemini para gerar títulos,
+            descrições, preencher a ficha técnica e criar imagens dos anúncios.
+            A chave fica criptografada no cofre e nunca é exibida de volta.
+            Pegue em{" "}
             <span className="font-mono">aistudio.google.com/apikey</span>.
           </p>
           {aiKeyConfigured ? (
@@ -217,7 +218,8 @@ export default async function WorkspaceSettingsPage({
             </p>
           ) : (
             <p className="inline-flex items-center gap-2 rounded-md bg-[var(--warning-bg)] px-3 py-1.5 text-sm text-[var(--warning)]">
-              Nenhuma chave própria — usando a chave padrão do sistema (se houver).
+              Nenhuma chave própria — usando a chave padrão do sistema (se
+              houver).
             </p>
           )}
           {canEditWorkspace ? (
@@ -229,7 +231,9 @@ export default async function WorkspaceSettingsPage({
                 <Input
                   label="Chave Gemini"
                   name="aiKey"
-                  placeholder={aiKeyConfigured ? "•••••••• (substituir)" : "AIza..."}
+                  placeholder={
+                    aiKeyConfigured ? "•••••••• (substituir)" : "AIza..."
+                  }
                   required
                   type="password"
                 />

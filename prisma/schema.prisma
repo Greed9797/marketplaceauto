@@ -592,6 +592,12 @@ model Produto {
   quantidade        Int          @default(1)
   condicao          String       @default("not_specified")
   atributos         Json?
+  /// Peso e dimensões da embalagem — obrigatórios pra publicar na Shopee
+  /// (e em várias categorias ML me2). pesoGramas em gramas; dimensões em cm.
+  pesoGramas        Int?
+  larguraCm         Int?
+  alturaCm          Int?
+  comprimentoCm     Int?
   payloadMl         Json?
   payloadShopee     Json?
   mlItemId          String?

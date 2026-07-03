@@ -29,6 +29,10 @@ const updateProdutoSchema = z.object({
   condicao: z.enum(["new", "used", "not_specified"]).default("not_specified"),
   atributos: z.record(z.string(), z.unknown()).optional().nullable(),
   imagens: z.array(z.string().url()).optional(),
+  pesoGramas: z.coerce.number().int().positive().optional().nullable(),
+  comprimentoCm: z.coerce.number().int().positive().optional().nullable(),
+  larguraCm: z.coerce.number().int().positive().optional().nullable(),
+  alturaCm: z.coerce.number().int().positive().optional().nullable(),
 });
 
 export async function PUT(request: NextRequest, context: RouteContext) {
@@ -95,6 +99,10 @@ export async function PUT(request: NextRequest, context: RouteContext) {
         atributos:
           (parsed.data.atributos as Prisma.InputJsonValue | undefined) ??
           undefined,
+        pesoGramas: parsed.data.pesoGramas ?? null,
+        comprimentoCm: parsed.data.comprimentoCm ?? null,
+        larguraCm: parsed.data.larguraCm ?? null,
+        alturaCm: parsed.data.alturaCm ?? null,
         score,
         scoreBreakdown: breakdown as unknown as Prisma.InputJsonValue,
       },

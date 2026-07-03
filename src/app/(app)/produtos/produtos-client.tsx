@@ -18,7 +18,9 @@ export function ImportarAnunciosButton({
   clienteId: string | null;
 }) {
   const router = useRouter();
-  const [loading, setLoading] = useState<"MERCADO_LIVRE" | "SHOPEE" | null>(null);
+  const [loading, setLoading] = useState<"MERCADO_LIVRE" | "SHOPEE" | null>(
+    null,
+  );
   const [msg, setMsg] = useState<string | null>(null);
   const [, startTransition] = useTransition();
 

@@ -237,6 +237,45 @@ function stateLabel(
   return id.includes("-") ? id.split("-").pop() || null : id;
 }
 
+/** Um atributo inferido do título por domain_discovery (value_id já pronto). */
+export type MercadoLivreInferredAttribute = {
+  id: string;
+  name: string;
+  value_id: string | null;
+  value_name: string | null;
+};
+
+export type MercadoLivreCategorySuggestion = {
+  categoryId: string;
+  categoryName: string;
+  domainId: string | null;
+  /** Atributos que o ML já inferiu do título — aproveitáveis no payload. */
+  inferredAttributes: MercadoLivreInferredAttribute[];
+};
+
+/** Shape cru de um atributo de categoria (GET /categories/{id}/attributes). */
+export type MercadoLivreCategoryAttribute = {
+  id: string;
+  name: string;
+  value_type: string;
+  tags?: Record<string, boolean> | null;
+  values?: Array<{ id?: string | null; name?: string | null }> | null;
+  allowed_units?: Array<{ id?: string | null; name?: string | null }> | null;
+  default_unit?: string | null;
+};
+
+type MercadoLivreDomainDiscoveryResponse = Array<{
+  domain_id?: string | null;
+  category_id?: string | null;
+  category_name?: string | null;
+  attributes?: Array<{
+    id?: string | null;
+    name?: string | null;
+    value_id?: string | null;
+    value_name?: string | null;
+  }> | null;
+}>;
+
 export class MercadoLivreClient {
   private readonly config?: MercadoLivreConfig;
   private readonly apiBaseUrl: string;
@@ -743,6 +782,61 @@ export class MercadoLivreClient {
     cache.set(categoryId, name);
     return name;
   }
+
+  /**
+   * Recomenda a categoria (folha) a partir do título via domain_discovery.
+   * Endpoint público (sem token). Retorna o primeiro match — mais provável.
+   */
+  async recommendCategory(
+    title: string,
+  ): Promise<MercadoLivreCategorySuggestion | null> {
+    const query = title.trim();
+    if (!query) return null;
+    const url = new URL(`${this.apiBaseUrl}/sites/MLB/domain_discovery/search`);
+    url.searchParams.set("q", query);
+    url.searchParams.set("limit", "1");
+    const response = await callWithRetry(() =>
+      fetchJson<MercadoLivreDomainDiscoveryResponse>(url, this.fetchImpl, {
+        signal: AbortSignal.timeout(15_000),
+      }),
+    );
+    const top = Array.isArray(response) ? response[0] : null;
+    const categoryId = top?.category_id?.trim();
+    if (!categoryId) return null;
+    return {
+      categoryId,
+      categoryName: top?.category_name?.trim() || categoryId,
+      domainId: top?.domain_id?.trim() || null,
+      inferredAttributes: (top?.attributes ?? [])
+        .filter((a): a is NonNullable<typeof a> => Boolean(a?.id))
+        .map((a) => ({
+          id: a.id as string,
+          name: a.name?.trim() || (a.id as string),
+          value_id: a.value_id?.trim() || null,
+          value_name: a.value_name?.trim() || null,
+        })),
+    };
+  }
+
+  /**
+   * Atributos de uma categoria (GET /categories/{id}/attributes, público).
+   * Retorna o array cru; a normalização de obrigatoriedade fica no consumidor.
+   */
+  async fetchCategoryAttributes(
+    categoryId: string,
+  ): Promise<MercadoLivreCategoryAttribute[]> {
+    const id = categoryId.trim();
+    if (!id) return [];
+    const url = new URL(
+      `${this.apiBaseUrl}/categories/${encodeURIComponent(id)}/attributes`,
+    );
+    const response = await callWithRetry(() =>
+      fetchJson<MercadoLivreCategoryAttribute[]>(url, this.fetchImpl, {
+        signal: AbortSignal.timeout(15_000),
+      }),
+    );
+    return Array.isArray(response) ? response : [];
+  }
 }
 
 const SHIPMENT_LOOKUP_CONCURRENCY = 4;
@@ -795,7 +889,10 @@ type MercadoLivreItemsMultigetResponse = Array<{
 
 type MercadoLivreListingBody = MercadoLivreItemBodyPayload & {
   price?: number | string | null;
-  pictures?: Array<{ secure_url?: string | null; url?: string | null } | null> | null;
+  pictures?: Array<{
+    secure_url?: string | null;
+    url?: string | null;
+  } | null> | null;
   attributes?: Array<{
     name?: string | null;
     value_name?: string | null;

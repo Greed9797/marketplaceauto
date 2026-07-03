@@ -1,16 +1,19 @@
 "use client";
 
 import {
+  CheckCircle2,
   ImagePlus,
   Loader2,
+  Rocket,
   Save,
   Sparkles,
   Star,
   Trash2,
   Wand2,
+  XCircle,
 } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -34,6 +37,10 @@ type ProdutoState = {
   preco: number;
   quantidade: number;
   condicao: string;
+  pesoGramas: number | null;
+  comprimentoCm: number | null;
+  larguraCm: number | null;
+  alturaCm: number | null;
 };
 
 type Props = {
@@ -42,6 +49,31 @@ type Props = {
   initialScore: number;
   breakdown: ScoreCriterion[];
   initial: ProdutoState;
+};
+
+/** Atributo obrigatório da categoria (espelha RequiredAttribute do backend). */
+type RequiredAttr = {
+  id: string;
+  name: string;
+  required: boolean;
+  type: string;
+  options?: { id: string; name: string }[];
+  units?: string[];
+  freeText: boolean;
+};
+
+type Validation = {
+  ok: boolean;
+  problemas: { campo: string; mensagem: string }[];
+};
+
+type Preview = {
+  platform: "ml" | "shopee";
+  connected: boolean;
+  categoryResolved: boolean;
+  alreadyPublished: boolean;
+  requiredAttributes: RequiredAttr[];
+  validation: Validation;
 };
 
 function scoreColor(score: number): string {
@@ -92,36 +124,54 @@ function ScoreGauge({ score }: { score: number }) {
   );
 }
 
-export function OtimizarClient({
-  produtoId,
-  clienteId,
-  initial,
-}: Props) {
+const inputCls =
+  "h-10 w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-surface)] px-3.5 text-sm text-[var(--text-primary)] outline-none focus:border-[var(--w3-red)] focus:ring-[3px] focus:ring-[var(--w3-red-bg)]";
+
+export function OtimizarClient({ produtoId, clienteId, initial }: Props) {
   const router = useRouter();
   const [state, setState] = useState<ProdutoState>(initial);
-  const [atributosText, setAtributosText] = useState(() =>
-    Object.entries(initial.atributos)
-      .map(([k, v]) => `${k}: ${v}`)
-      .join("\n"),
-  );
+  // Atributos "extras": os que NÃO são obrigatórios da categoria ficam nesta
+  // textarea livre; os obrigatórios viram campos dirigidos (union do preview).
   const [saving, setSaving] = useState(false);
   const [generatingCopy, setGeneratingCopy] = useState(false);
   const [generatingImage, setGeneratingImage] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // Parse "chave: valor" por linha → Record.
-  const atributos = useMemo(() => {
-    const out: Record<string, string> = {};
-    for (const line of atributosText.split("\n")) {
-      const idx = line.indexOf(":");
-      if (idx <= 0) continue;
-      const k = line.slice(0, idx).trim();
-      const v = line.slice(idx + 1).trim();
-      if (k && v) out[k] = v;
+  const [preview, setPreview] = useState<{
+    ml: Preview;
+    shopee: Preview;
+  } | null>(null);
+  const [publishing, setPublishing] = useState<"ml" | "shopee" | null>(null);
+  const [confirm, setConfirm] = useState<"ml" | "shopee" | null>(null);
+
+  // Atributos obrigatórios (dedup por nome) das duas plataformas conectadas.
+  const requiredAttrs = useMemo<RequiredAttr[]>(() => {
+    if (!preview) return [];
+    const byName = new Map<string, RequiredAttr>();
+    for (const p of [preview.ml, preview.shopee]) {
+      for (const a of p.requiredAttributes) {
+        if (!a.required) continue;
+        if (!byName.has(a.name)) byName.set(a.name, a);
+      }
     }
-    return out;
-  }, [atributosText]);
+    return [...byName.values()];
+  }, [preview]);
+
+  const requiredNames = useMemo(
+    () => new Set(requiredAttrs.map((a) => a.name)),
+    [requiredAttrs],
+  );
+
+  // Textarea de extras: só as chaves fora do conjunto obrigatório.
+  const extrasText = useMemo(
+    () =>
+      Object.entries(state.atributos)
+        .filter(([k]) => !requiredNames.has(k))
+        .map(([k, v]) => `${k}: ${v}`)
+        .join("\n"),
+    [state.atributos, requiredNames],
+  );
 
   // Score ao vivo enquanto edita.
   const { score, breakdown } = useMemo(
@@ -132,17 +182,44 @@ export function OtimizarClient({
         descricao: state.descricao,
         imagens: state.imagens,
         fotoUrl: state.fotoUrl,
-        atributos,
+        atributos: state.atributos,
         categoriaMlId: state.categoriaMlId,
         categoriaShopeeId: state.categoriaShopeeId,
         preco: state.preco,
         quantidade: state.quantidade,
       }),
-    [state, atributos],
+    [state],
   );
 
   function patch(next: Partial<ProdutoState>) {
     setState((prev) => ({ ...prev, ...next }));
+  }
+
+  function setAttr(name: string, value: string) {
+    setState((prev) => {
+      const atributos = { ...prev.atributos };
+      if (value.trim()) atributos[name] = value;
+      else delete atributos[name];
+      return { ...prev, atributos };
+    });
+  }
+
+  function setExtras(text: string) {
+    setState((prev) => {
+      // Preserva os obrigatórios; reconstrói só a parte "extras" da textarea.
+      const atributos: Record<string, string> = {};
+      for (const [k, v] of Object.entries(prev.atributos)) {
+        if (requiredNames.has(k)) atributos[k] = v;
+      }
+      for (const line of text.split("\n")) {
+        const idx = line.indexOf(":");
+        if (idx <= 0) continue;
+        const k = line.slice(0, idx).trim();
+        const v = line.slice(idx + 1).trim();
+        if (k && v && !requiredNames.has(k)) atributos[k] = v;
+      }
+      return { ...prev, atributos };
+    });
   }
 
   function addImagem(url: string) {
@@ -161,6 +238,25 @@ export function OtimizarClient({
       return { ...prev, imagens, fotoUrl };
     });
   }
+
+  const carregarPreview = useCallback(async () => {
+    try {
+      const response = await fetch(
+        `/api/produtos/${produtoId}/publicar-preview`,
+      );
+      const data = (await response.json().catch(() => null)) as {
+        success?: boolean;
+        data?: { ml: Preview; shopee: Preview };
+      } | null;
+      if (response.ok && data?.success && data.data) setPreview(data.data);
+    } catch {
+      // Preview é auxiliar — falha silenciosa mantém a tela utilizável.
+    }
+  }, [produtoId]);
+
+  useEffect(() => {
+    void carregarPreview();
+  }, [carregarPreview]);
 
   async function gerarCopy() {
     setError(null);
@@ -188,19 +284,17 @@ export function OtimizarClient({
         return;
       }
       const c = data.data;
-      patch({
-        tituloMl: c.tituloMl ?? state.tituloMl,
-        tituloShopee: c.tituloShopee ?? state.tituloShopee,
-        descricao: c.descricao ?? state.descricao,
-        categoriaShopeeId: c.categoriaShopeeId ?? state.categoriaShopeeId,
-      });
-      if (c.atributos && Object.keys(c.atributos).length > 0) {
-        setAtributosText(
-          Object.entries(c.atributos)
-            .map(([k, v]) => `${k}: ${v}`)
-            .join("\n"),
-        );
-      }
+      setState((prev) => ({
+        ...prev,
+        tituloMl: c.tituloMl ?? prev.tituloMl,
+        tituloShopee: c.tituloShopee ?? prev.tituloShopee,
+        descricao: c.descricao ?? prev.descricao,
+        categoriaShopeeId: c.categoriaShopeeId ?? prev.categoriaShopeeId,
+        atributos:
+          c.atributos && Object.keys(c.atributos).length > 0
+            ? { ...prev.atributos, ...c.atributos }
+            : prev.atributos,
+      }));
       setMsg("Conteúdo gerado — revise e salve.");
     } catch {
       setError("Falha ao gerar com IA");
@@ -237,7 +331,7 @@ export function OtimizarClient({
     }
   }
 
-  async function salvar() {
+  async function salvar(): Promise<boolean> {
     setError(null);
     setMsg(null);
     setSaving(true);
@@ -257,7 +351,11 @@ export function OtimizarClient({
           preco: state.preco,
           quantidade: state.quantidade,
           condicao: state.condicao,
-          atributos,
+          atributos: state.atributos,
+          pesoGramas: state.pesoGramas,
+          comprimentoCm: state.comprimentoCm,
+          larguraCm: state.larguraCm,
+          alturaCm: state.alturaCm,
         }),
       });
       const data = (await response.json().catch(() => null)) as {
@@ -266,19 +364,57 @@ export function OtimizarClient({
       } | null;
       if (!response.ok || !data?.success) {
         setError(data?.error ?? "Falha ao salvar");
-        return;
+        return false;
       }
       setMsg("Anúncio salvo.");
       router.refresh();
+      await carregarPreview();
+      return true;
     } catch {
       setError("Falha ao salvar");
+      return false;
     } finally {
       setSaving(false);
     }
   }
 
-  const inputCls =
-    "h-10 w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-surface)] px-3.5 text-sm text-[var(--text-primary)] outline-none focus:border-[var(--w3-red)] focus:ring-[3px] focus:ring-[var(--w3-red-bg)]";
+  async function publicar(platform: "ml" | "shopee") {
+    setConfirm(null);
+    setError(null);
+    setMsg(null);
+    // Salva antes: o publish lê o produto do banco, não o estado local.
+    const saved = await salvar();
+    if (!saved) return;
+    setPublishing(platform);
+    try {
+      const url =
+        platform === "ml" ? "/api/ml/publicar" : "/api/shopee/publicar";
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ produtoId }),
+      });
+      const data = (await response.json().catch(() => null)) as {
+        success?: boolean;
+        error?: string;
+      } | null;
+      if (!response.ok || !data?.success) {
+        setError(data?.error ?? "Falha ao publicar");
+        return;
+      }
+      setMsg(
+        platform === "ml"
+          ? "Publicado no Mercado Livre."
+          : "Publicado na Shopee.",
+      );
+      router.refresh();
+      await carregarPreview();
+    } catch {
+      setError("Falha ao publicar");
+    } finally {
+      setPublishing(null);
+    }
+  }
 
   return (
     <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
@@ -410,17 +546,36 @@ export function OtimizarClient({
                 value={state.descricao}
               />
             </label>
-            <label className="grid gap-1.5">
-              <span className="text-caption text-[var(--text-tertiary)]">
-                Ficha técnica (uma por linha: chave: valor)
-              </span>
-              <textarea
-                className={cn(inputCls, "h-32 resize-y py-2 font-mono text-xs")}
-                onChange={(e) => setAtributosText(e.target.value)}
-                placeholder={"Marca: W3\nMaterial: Algodão\nTamanho: M"}
-                value={atributosText}
-              />
-            </label>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <label className="grid gap-1.5">
+                <span className="text-caption text-[var(--text-tertiary)]">
+                  Categoria Mercado Livre (ex: MLB1234)
+                </span>
+                <input
+                  className={inputCls}
+                  onChange={(e) => patch({ categoriaMlId: e.target.value })}
+                  placeholder="Auto-resolvida se vazio"
+                  value={state.categoriaMlId}
+                />
+              </label>
+              <label className="grid gap-1.5">
+                <span className="text-caption text-[var(--text-tertiary)]">
+                  Categoria Shopee (ID)
+                </span>
+                <input
+                  className={inputCls}
+                  onChange={(e) =>
+                    patch({
+                      categoriaShopeeId: e.target.value
+                        ? Number(e.target.value)
+                        : null,
+                    })
+                  }
+                  type="number"
+                  value={state.categoriaShopeeId ?? ""}
+                />
+              </label>
+            </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <label className="grid gap-1.5">
                 <span className="text-caption text-[var(--text-tertiary)]">
@@ -452,9 +607,148 @@ export function OtimizarClient({
             </div>
           </CardContent>
         </Card>
+
+        {/* Ficha técnica dirigida pelos atributos obrigatórios */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Ficha técnica</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {requiredAttrs.length > 0 ? (
+              <div className="space-y-3">
+                <p className="text-caption text-[var(--text-tertiary)]">
+                  Campos exigidos pela categoria:
+                </p>
+                {requiredAttrs.map((attr) => {
+                  const value = state.atributos[attr.name] ?? "";
+                  return (
+                    <label key={attr.name} className="grid gap-1.5">
+                      <span className="text-caption text-[var(--text-primary)]">
+                        {attr.name}
+                        <span className="text-[var(--danger)]"> *</span>
+                      </span>
+                      {attr.options && attr.options.length > 0 ? (
+                        <select
+                          className={inputCls}
+                          onChange={(e) => setAttr(attr.name, e.target.value)}
+                          value={value}
+                        >
+                          <option value="">Selecione…</option>
+                          {attr.options.map((o) => (
+                            <option key={o.id || o.name} value={o.name}>
+                              {o.name}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <input
+                          className={inputCls}
+                          onChange={(e) => setAttr(attr.name, e.target.value)}
+                          placeholder={
+                            attr.units?.length
+                              ? `Valor + unidade (${attr.units.join(", ")})`
+                              : undefined
+                          }
+                          value={value}
+                        />
+                      )}
+                    </label>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="text-caption text-[var(--text-tertiary)]">
+                Conecte uma conta e defina a categoria para ver os campos
+                exigidos.
+              </p>
+            )}
+            <label className="grid gap-1.5">
+              <span className="text-caption text-[var(--text-tertiary)]">
+                Outros atributos (uma por linha: chave: valor)
+              </span>
+              <textarea
+                className={cn(inputCls, "h-28 resize-y py-2 font-mono text-xs")}
+                onChange={(e) => setExtras(e.target.value)}
+                placeholder={"Material: Algodão\nCor: Preto"}
+                value={extrasText}
+              />
+            </label>
+          </CardContent>
+        </Card>
+
+        {/* Embalagem (Shopee exige) */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Embalagem</CardTitle>
+          </CardHeader>
+          <CardContent className="grid gap-4 sm:grid-cols-4">
+            <label className="grid gap-1.5">
+              <span className="text-caption text-[var(--text-tertiary)]">
+                Peso (g)
+              </span>
+              <input
+                className={inputCls}
+                onChange={(e) =>
+                  patch({
+                    pesoGramas: e.target.value ? Number(e.target.value) : null,
+                  })
+                }
+                type="number"
+                value={state.pesoGramas ?? ""}
+              />
+            </label>
+            <label className="grid gap-1.5">
+              <span className="text-caption text-[var(--text-tertiary)]">
+                Compr. (cm)
+              </span>
+              <input
+                className={inputCls}
+                onChange={(e) =>
+                  patch({
+                    comprimentoCm: e.target.value
+                      ? Number(e.target.value)
+                      : null,
+                  })
+                }
+                type="number"
+                value={state.comprimentoCm ?? ""}
+              />
+            </label>
+            <label className="grid gap-1.5">
+              <span className="text-caption text-[var(--text-tertiary)]">
+                Larg. (cm)
+              </span>
+              <input
+                className={inputCls}
+                onChange={(e) =>
+                  patch({
+                    larguraCm: e.target.value ? Number(e.target.value) : null,
+                  })
+                }
+                type="number"
+                value={state.larguraCm ?? ""}
+              />
+            </label>
+            <label className="grid gap-1.5">
+              <span className="text-caption text-[var(--text-tertiary)]">
+                Alt. (cm)
+              </span>
+              <input
+                className={inputCls}
+                onChange={(e) =>
+                  patch({
+                    alturaCm: e.target.value ? Number(e.target.value) : null,
+                  })
+                }
+                type="number"
+                value={state.alturaCm ?? ""}
+              />
+            </label>
+          </CardContent>
+        </Card>
       </div>
 
-      {/* Painel de score */}
+      {/* Painel lateral */}
       <div className="space-y-4">
         <Card className="xl:sticky xl:top-4">
           <CardHeader>
@@ -496,7 +790,7 @@ export function OtimizarClient({
             <Button
               className="w-full"
               disabled={saving}
-              onClick={salvar}
+              onClick={() => void salvar()}
               type="button"
             >
               {saving ? (
@@ -514,6 +808,161 @@ export function OtimizarClient({
             ) : null}
           </CardContent>
         </Card>
+
+        {/* Publicar */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Publicar</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {preview ? (
+              <>
+                <PublishRow
+                  label="Mercado Livre"
+                  preview={preview.ml}
+                  busy={publishing === "ml"}
+                  onPublish={() => setConfirm("ml")}
+                />
+                <PublishRow
+                  label="Shopee"
+                  preview={preview.shopee}
+                  busy={publishing === "shopee"}
+                  onPublish={() => setConfirm("shopee")}
+                />
+              </>
+            ) : (
+              <p className="text-caption text-[var(--text-tertiary)]">
+                Verificando requisitos…
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Confirmação de publicação */}
+      {confirm ? (
+        <ConfirmDialog
+          title={`Publicar em ${confirm === "ml" ? "Mercado Livre" : "Shopee"}?`}
+          message="O anúncio será salvo e enviado ao marketplace. Esta ação cria o item real na plataforma."
+          onCancel={() => setConfirm(null)}
+          onConfirm={() => void publicar(confirm)}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+/** Linha de uma plataforma no card Publicar: status + checklist + botão. */
+function PublishRow({
+  label,
+  preview,
+  busy,
+  onPublish,
+}: {
+  label: string;
+  preview: Preview;
+  busy: boolean;
+  onPublish: () => void;
+}) {
+  const { connected, alreadyPublished, validation } = preview;
+  const canPublish = connected && !alreadyPublished && validation.ok;
+
+  return (
+    <div className="space-y-2 rounded-md border border-[var(--border-subtle)] p-3">
+      <div className="flex items-center justify-between">
+        <span className="font-medium text-[var(--text-primary)]">{label}</span>
+        {alreadyPublished ? (
+          <span className="text-xs text-[var(--success)]">Publicado ✓</span>
+        ) : !connected ? (
+          <span className="text-xs text-[var(--text-tertiary)]">
+            Não conectado
+          </span>
+        ) : validation.ok ? (
+          <span className="inline-flex items-center gap-1 text-xs text-[var(--success)]">
+            <CheckCircle2 className="size-3.5" /> Pronto
+          </span>
+        ) : (
+          <span className="text-xs text-[var(--danger)]">
+            {validation.problemas.length} pendência(s)
+          </span>
+        )}
+      </div>
+
+      {connected && !alreadyPublished && !validation.ok ? (
+        <ul className="space-y-1">
+          {validation.problemas.map((p) => (
+            <li
+              key={p.campo}
+              className="flex items-start gap-1.5 text-xs text-[var(--text-tertiary)]"
+            >
+              <XCircle className="mt-0.5 size-3 shrink-0 text-[var(--danger)]" />
+              {p.mensagem}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+
+      {connected && !alreadyPublished ? (
+        <Button
+          className="w-full"
+          disabled={!canPublish || busy}
+          onClick={onPublish}
+          size="sm"
+          type="button"
+        >
+          {busy ? (
+            <Loader2 aria-hidden className="size-3.5 animate-spin" />
+          ) : (
+            <Rocket aria-hidden className="size-3.5" />
+          )}
+          Publicar em {label}
+        </Button>
+      ) : null}
+    </div>
+  );
+}
+
+/** Dialog de confirmação mínimo (Onda 1 — sem lib de modal). */
+function ConfirmDialog({
+  title,
+  message,
+  onConfirm,
+  onCancel,
+}: {
+  title: string;
+  message: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-50 grid place-items-center bg-black/50 p-4"
+      onClick={onCancel}
+      role="presentation"
+    >
+      <div
+        className="w-full max-w-sm space-y-4 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-5 shadow-lg"
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+      >
+        <h2 className="text-lg font-semibold text-[var(--text-primary)]">
+          {title}
+        </h2>
+        <p className="text-sm text-[var(--text-tertiary)]">{message}</p>
+        <div className="flex justify-end gap-2">
+          <Button
+            onClick={onCancel}
+            size="sm"
+            type="button"
+            variant="secondary"
+          >
+            Cancelar
+          </Button>
+          <Button onClick={onConfirm} size="sm" type="button">
+            Publicar
+          </Button>
+        </div>
       </div>
     </div>
   );

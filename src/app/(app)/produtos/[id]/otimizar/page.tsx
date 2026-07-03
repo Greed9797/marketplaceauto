@@ -48,6 +48,10 @@ export default async function OtimizarPage({ params }: OtimizarPageProps) {
       preco: true,
       quantidade: true,
       condicao: true,
+      pesoGramas: true,
+      comprimentoCm: true,
+      larguraCm: true,
+      alturaCm: true,
       score: true,
       cliente: { select: { nome: true } },
     },
@@ -114,6 +118,10 @@ export default async function OtimizarPage({ params }: OtimizarPageProps) {
           preco: Number(produto.preco),
           quantidade: produto.quantidade,
           condicao: produto.condicao,
+          pesoGramas: produto.pesoGramas,
+          comprimentoCm: produto.comprimentoCm,
+          larguraCm: produto.larguraCm,
+          alturaCm: produto.alturaCm,
         }}
       />
     </div>

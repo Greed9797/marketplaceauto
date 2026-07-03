@@ -82,7 +82,8 @@ export function calcularScore(produto: ScoreableProduto): ListingScore {
     if (titulo.length >= 20 && titulo.length <= tituloMax) {
       pontosTitulo += 8;
     } else if (titulo.length < 20) {
-      dicaTitulo = "Título curto: use ao menos 20 caracteres com palavras-chave";
+      dicaTitulo =
+        "Título curto: use ao menos 20 caracteres com palavras-chave";
     } else {
       dicaTitulo = `Título longo demais: reduza para até ${tituloMax} caracteres`;
     }

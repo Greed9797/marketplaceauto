@@ -16,7 +16,17 @@ import type { ShopeeConfig } from "@/lib/connectors/shopee/oauth";
 import { signShopRequest } from "@/lib/connectors/shopee/signer";
 import { prisma } from "@/lib/db/prisma";
 
+import {
+  buildShopeeAttributes,
+  type ShopeeAttributePayload,
+} from "./attribute-payload";
+import {
+  normalizeShopeeAttributes,
+  type RequiredAttribute,
+} from "./category-attributes";
 import { getShopeeEnvConfig } from "./shopee-env-config";
+import { humanizePublishError } from "./humanize-publish-error";
+import { validarPublicavel, type PublishPreview } from "./publish-validation";
 
 /**
  * Refresh the access token this many seconds before it actually expires, so an
@@ -178,19 +188,32 @@ export function buildShopeeAddItemPayload(input: {
   produto: Produto;
   logisticId: number;
   imageIds: string[];
+  attributes?: ShopeeAttributePayload[];
 }): Record<string, unknown> {
   const { produto } = input;
   const name = (produto.tituloShopee ?? produto.nomeOriginal).slice(0, 120);
 
+  // Peso em KG (Shopee exige); default 0.5kg se o produto não informou.
+  const weight = produto.pesoGramas ? produto.pesoGramas / 1000 : 0.5;
+  const dimension =
+    produto.comprimentoCm && produto.larguraCm && produto.alturaCm
+      ? {
+          package_length: produto.comprimentoCm,
+          package_width: produto.larguraCm,
+          package_height: produto.alturaCm,
+        }
+      : undefined;
+
   return {
     original_price: Number(produto.preco),
     description: produto.descricao ?? produto.nomeOriginal,
-    weight: 0.5,
+    weight,
+    ...(dimension ? { dimension } : {}),
     item_name: name,
     item_status: "NORMAL",
     image: { image_id_list: input.imageIds },
     category_id: produto.categoriaShopeeId,
-    attribute_list: [],
+    attribute_list: input.attributes ?? [],
     logistic_info: [
       { logistic_id: input.logisticId, enabled: true, is_free: false },
     ],
@@ -338,10 +361,45 @@ export async function publishProdutoToShopee(input: {
       if (imageId) imageIds.push(imageId);
     }
 
+    // Atributos obrigatórios da categoria → attribute_list com value_id real.
+    let required: RequiredAttribute[] = [];
+    try {
+      const client = new ShopeeClient({ config });
+      const rawAttrs = await client.fetchCategoryAttributes({
+        categoryId: produto.categoriaShopeeId,
+        accessToken,
+        shopId,
+      });
+      required = normalizeShopeeAttributes(rawAttrs);
+    } catch {
+      // Sem atributos resolvidos, segue com o mínimo — a Shopee rejeita se
+      // faltar obrigatório e o erro humanizado (Fase 1.6) aponta o campo.
+    }
+
+    // Gate: valida antes de disparar a API — evita o HTTP 400 cego.
+    const validation = validarPublicavel({
+      produto,
+      platform: "shopee",
+      required,
+    });
+    if (!validation.ok) {
+      throw new Error(
+        `Anúncio incompleto: ${validation.problemas
+          .map((p) => p.mensagem)
+          .join(" ")}`,
+      );
+    }
+
+    const attributes: ShopeeAttributePayload[] = buildShopeeAttributes({
+      atributos: produto.atributos as Record<string, string> | null,
+      required,
+    });
+
     const payload = buildShopeeAddItemPayload({
       produto,
       logisticId,
       imageIds,
+      attributes,
     });
     const itemId = await addShopeeItem({
       config,
@@ -376,6 +434,7 @@ export async function publishProdutoToShopee(input: {
       error instanceof Error
         ? error.message
         : "Falha desconhecida ao publicar na Shopee.";
+    const friendly = humanizePublishError(message);
 
     await prisma.$transaction([
       prisma.produto.update({
@@ -388,12 +447,74 @@ export async function publishProdutoToShopee(input: {
           clienteId: input.clienteId,
           plataforma: "SHOPEE",
           status: "erro",
-          erroMensagem: message,
-          respostaApi: { error: message },
+          erroMensagem: `${friendly.title} — ${friendly.action}`,
+          respostaApi: { error: message, detail: friendly.detail },
         },
       }),
     ]);
 
     throw error;
   }
+}
+
+/**
+ * Preview read-only para a UI (Fase 1.7): resolve token → atributos da categoria
+ * e roda o gate SEM publicar nem mutar. Reusa os mesmos helpers do publish.
+ * `connected:false` quando não há env/conta. Categoria da Shopee é o
+ * `categoriaShopeeId` do produto (não há descoberta pública sem token).
+ */
+export async function previewPublishShopee(input: {
+  clienteId: string;
+  produto: Produto;
+}): Promise<PublishPreview> {
+  const empty: PublishPreview = {
+    platform: "shopee",
+    connected: false,
+    categoryResolved: input.produto.categoriaShopeeId !== null,
+    alreadyPublished: Boolean(input.produto.shopeeItemId),
+    requiredAttributes: [],
+    validation: { ok: false, problemas: [] },
+  };
+
+  const config = getShopeeEnvConfig();
+  if (!config) return empty;
+
+  const account = await prisma.connectorAccount.findFirst({
+    where: {
+      clienteId: input.clienteId,
+      provider: ConnectorProvider.SHOPEE,
+      status: ConnectorStatus.ACTIVE,
+    },
+  });
+  if (!account) return empty;
+
+  const { accessToken, shopId } = await resolveShopeeToken({ config, account });
+
+  let required: RequiredAttribute[] = [];
+  if (input.produto.categoriaShopeeId !== null) {
+    try {
+      const client = new ShopeeClient({ config });
+      const rawAttrs = await client.fetchCategoryAttributes({
+        categoryId: input.produto.categoriaShopeeId,
+        accessToken,
+        shopId,
+      });
+      required = normalizeShopeeAttributes(rawAttrs);
+    } catch {
+      // idem publish: sem atributos, o gate reprova o que falta.
+    }
+  }
+
+  return {
+    platform: "shopee",
+    connected: true,
+    categoryResolved: input.produto.categoriaShopeeId !== null,
+    alreadyPublished: Boolean(input.produto.shopeeItemId),
+    requiredAttributes: required,
+    validation: validarPublicavel({
+      produto: input.produto,
+      platform: "shopee",
+      required,
+    }),
+  };
 }

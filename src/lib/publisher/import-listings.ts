@@ -56,7 +56,8 @@ function produtoDataFromListing(
     imagens: listing.images,
     atributos: listing.attributes,
     categoriaMlId: isMl ? listing.categoryId : null,
-    categoriaShopeeId: !isMl && listing.categoryId ? Number(listing.categoryId) : null,
+    categoriaShopeeId:
+      !isMl && listing.categoryId ? Number(listing.categoryId) : null,
     preco: listing.price ?? 0,
     quantidade: listing.availableQuantity ?? 0,
   });
@@ -125,7 +126,9 @@ export async function importClienteListings(input: {
   if (input.platform === "MERCADO_LIVRE") {
     const config = getMlEnvConfig();
     if (!config) {
-      throw new Error("Credenciais Mercado Livre não configuradas no ambiente.");
+      throw new Error(
+        "Credenciais Mercado Livre não configuradas no ambiente.",
+      );
     }
     const account = await requireClienteAccount(
       input.clienteId,

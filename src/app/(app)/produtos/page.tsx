@@ -82,7 +82,10 @@ export default async function ProdutosPage({
 
       {clientes.length > 0 ? (
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-          <ProdutosFilter clientes={clientes} selected={scopedClienteId ?? ""} />
+          <ProdutosFilter
+            clientes={clientes}
+            selected={scopedClienteId ?? ""}
+          />
           <ImportarAnunciosButton clienteId={scopedClienteId} />
         </div>
       ) : null}

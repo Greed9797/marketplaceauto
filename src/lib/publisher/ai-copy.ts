@@ -1,5 +1,7 @@
 import type { Cliente, Produto } from "@prisma/client";
 
+import type { RequiredAttribute } from "./category-attributes";
+
 /**
  * Gemini generateContent REST endpoint. Called directly over `fetch` (no SDK
  * dependency) to keep the bundle lean and avoid adding a package for a single
@@ -43,12 +45,39 @@ function parseExemplos(raw: string | null): string[] {
     .filter(Boolean);
 }
 
+/**
+ * Bloco do prompt que lista os atributos OBRIGATÓRIOS da categoria — a IA
+ * devolve `atributos` já com essas chaves preenchidas (Fase 1.4). Para enum,
+ * lista os valores permitidos para a IA escolher um deles (não inventar).
+ */
+function buildRequiredAttributesBlock(required: RequiredAttribute[]): string {
+  const obrigatorios = required.filter((a) => a.required);
+  if (obrigatorios.length === 0) return "";
+
+  const linhas = obrigatorios
+    .map((a) => {
+      const opcoes = a.options?.length
+        ? ` — escolha EXATAMENTE um: ${a.options.map((o) => o.name).join(" | ")}`
+        : a.units?.length
+          ? ` — valor com unidade (${a.units.join(", ")}), ex: "128 GB"`
+          : "";
+      return `- "${a.name}"${opcoes}`;
+    })
+    .join("\n");
+
+  return `
+A categoria EXIGE estes atributos — preencha TODOS em "atributos" usando a chave exata entre aspas:
+${linhas}
+`;
+}
+
 function buildPrompt(input: {
   nomeProduto: string;
   nicho: string;
   estiloDescricao: string;
   exemplosTitulos: string[];
   exemplosDescricoes: string[];
+  requiredAttributes: RequiredAttribute[];
 }): string {
   const titulos =
     input.exemplosTitulos.map((t, i) => `${i + 1}. ${t}`).join("\n") ||
@@ -68,7 +97,7 @@ ${titulos}
 
 Exemplos de descrições aprovadas:
 ${descricoes}
-
+${buildRequiredAttributesBlock(input.requiredAttributes)}
 Retorne APENAS JSON válido, sem markdown, sem explicações:
 {"titulo_ml":"...","titulo_shopee":"...","descricao":"...","categoria_ml_sugerida":"...","categoria_shopee_id":0,"atributos":{}}`;
 }
@@ -134,6 +163,8 @@ export async function gerarCopy(input: {
   /** Imagem do produto (base64 sem prefixo data:) para prompt multimodal. */
   imagemBase64?: string | null;
   imagemMimeType?: string | null;
+  /** Atributos obrigatórios da categoria (Fase 1.4) — a IA os preenche. */
+  requiredAttributes?: RequiredAttribute[] | null;
 }): Promise<GeneratedCopy> {
   const apiKey = input.apiKey?.trim() || process.env.GEMINI_API_KEY;
   if (!apiKey) {
@@ -148,6 +179,7 @@ export async function gerarCopy(input: {
     estiloDescricao: input.cliente.estiloDescricao ?? "",
     exemplosTitulos: parseExemplos(input.cliente.exemplosTitulos),
     exemplosDescricoes: parseExemplos(input.cliente.exemplosDescricoes),
+    requiredAttributes: input.requiredAttributes ?? [],
   });
 
   // Multimodal: quando há imagem, envia foto + texto (Gemini Flash é
