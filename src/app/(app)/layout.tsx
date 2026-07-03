@@ -1,5 +1,6 @@
 import { after } from "next/server";
 
+import { CopilotFab } from "@/components/copilot/copilot-fab";
 import { MobileNavProvider } from "@/components/layouts/mobile-nav-context";
 import { Sidebar } from "@/components/layouts/sidebar";
 import { Topbar } from "@/components/layouts/topbar";
@@ -43,6 +44,7 @@ export default async function AppLayout({
           <div className="px-4 py-6 sm:px-6 lg:px-8">{children}</div>
         </div>
       </MobileNavProvider>
+      <CopilotFab />
       <AnalyticsProvider
         userId={context.user.id}
         workspaceId={context.currentWorkspace.id}
