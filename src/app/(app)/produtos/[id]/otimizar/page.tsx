@@ -53,6 +53,7 @@ export default async function OtimizarPage({ params }: OtimizarPageProps) {
       larguraCm: true,
       alturaCm: true,
       score: true,
+      updatedAt: true,
       cliente: { select: { nome: true } },
     },
   });
@@ -103,6 +104,7 @@ export default async function OtimizarPage({ params }: OtimizarPageProps) {
       <OtimizarClient
         produtoId={produto.id}
         clienteId={produto.clienteId}
+        syncKey={produto.updatedAt.toISOString()}
         initialScore={score}
         breakdown={breakdown as ScoreCriterion[]}
         initial={{

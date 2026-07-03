@@ -12,7 +12,7 @@ import {
   Wand2,
   XCircle,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
@@ -46,6 +46,9 @@ type ProdutoState = {
 type Props = {
   produtoId: string;
   clienteId: string;
+  /** Muda quando o produto é atualizado no servidor (produto.updatedAt) —
+   * dispara a ressincronização do estado local (real-time após IA/harness). */
+  syncKey: string;
   initialScore: number;
   breakdown: ScoreCriterion[];
   initial: ProdutoState;
@@ -127,9 +130,25 @@ function ScoreGauge({ score }: { score: number }) {
 const inputCls =
   "h-10 w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-surface)] px-3.5 text-sm text-[var(--text-primary)] outline-none focus:border-[var(--w3-red)] focus:ring-[3px] focus:ring-[var(--w3-red-bg)]";
 
-export function OtimizarClient({ produtoId, clienteId, initial }: Props) {
+export function OtimizarClient({
+  produtoId,
+  clienteId,
+  syncKey,
+  initial,
+}: Props) {
   const router = useRouter();
   const [state, setState] = useState<ProdutoState>(initial);
+  // Ressincroniza o formulário quando o servidor muda o produto (ex.: copiloto
+  // ou harness aplicaram algo → router.refresh traz novo syncKey). Sem isso, o
+  // useState local ignora os novos props e só atualiza após reload manual.
+  const initialRef = useRef(initial);
+  initialRef.current = initial;
+  const carregarPreviewRef = useRef<(() => Promise<void>) | null>(null);
+  useEffect(() => {
+    setState(initialRef.current);
+    void carregarPreviewRef.current?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [syncKey]);
   // Atributos "extras": os que NÃO são obrigatórios da categoria ficam nesta
   // textarea livre; os obrigatórios viram campos dirigidos (union do preview).
   const [saving, setSaving] = useState(false);
@@ -260,6 +279,7 @@ export function OtimizarClient({ produtoId, clienteId, initial }: Props) {
       // Preview é auxiliar — falha silenciosa mantém a tela utilizável.
     }
   }, [produtoId]);
+  carregarPreviewRef.current = carregarPreview;
 
   useEffect(() => {
     void carregarPreview();

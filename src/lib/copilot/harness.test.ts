@@ -19,7 +19,9 @@ describe("combineScore", () => {
 
 describe("shouldStop", () => {
   it("stops only when score >= threshold AND publicavel", () => {
-    expect(shouldStop({ score: 90, publicavel: true, threshold: 85 })).toBe(true);
+    expect(shouldStop({ score: 90, publicavel: true, threshold: 85 })).toBe(
+      true,
+    );
     expect(shouldStop({ score: 90, publicavel: false, threshold: 85 })).toBe(
       false,
     );

@@ -39,7 +39,10 @@ const DEFAULT_MAX_ROUNDS = 3;
 const DEFAULT_THRESHOLD = 85;
 
 /** Combina completude determinística com o juízo do M3. Puro (testável). */
-export function combineScore(completude: number, juizM3: number | null): number {
+export function combineScore(
+  completude: number,
+  juizM3: number | null,
+): number {
   if (juizM3 === null) return Math.round(clamp0100(completude));
   return Math.round(0.5 * clamp0100(completude) + 0.5 * clamp0100(juizM3));
 }
@@ -75,7 +78,7 @@ async function judgeCopy(input: {
           role: "system",
           content:
             "Você avalia a QUALIDADE de copy de anúncio de marketplace BR. " +
-            "Responda APENAS JSON: {\"score\": 0-100, \"feedback\": [\"...\"]}. " +
+            'Responda APENAS JSON: {"score": 0-100, "feedback": ["..."]}. ' +
             "Penalize título genérico, sem palavra-chave, descrição curta/vazia.",
         },
         {
@@ -87,7 +90,9 @@ Descrição: ${input.descricao ? input.descricao.slice(0, 500) : "(vazia)"}`,
         },
       ],
     });
-    const clean = reply.content.replace(/^```json\s*/i, "").replace(/```$/i, "");
+    const clean = reply.content
+      .replace(/^```json\s*/i, "")
+      .replace(/```$/i, "");
     const parsed: unknown = JSON.parse(clean);
     if (typeof parsed !== "object" || parsed === null) return null;
     const rec = parsed as Record<string, unknown>;
@@ -113,7 +118,11 @@ export async function evaluateListing(input: {
     },
   });
   if (!produto) {
-    return { score: 0, publicavel: false, feedback: ["Produto não encontrado."] };
+    return {
+      score: 0,
+      publicavel: false,
+      feedback: ["Produto não encontrado."],
+    };
   }
 
   const { score: completude, breakdown } = calcularScore({
@@ -139,8 +148,8 @@ export async function evaluateListing(input: {
   ]);
 
   // Publicável = há ao menos 1 plataforma conectada e todas as conectadas ok.
-  const conectadas = [ml, shopee].filter(
-    (p): p is NonNullable<typeof p> => Boolean(p?.connected),
+  const conectadas = [ml, shopee].filter((p): p is NonNullable<typeof p> =>
+    Boolean(p?.connected),
   );
   const publicavel =
     conectadas.length > 0 &&

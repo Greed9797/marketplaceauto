@@ -19,8 +19,21 @@ type RouteContext = {
 const updateProdutoSchema = z.object({
   nomeOriginal: z.string().trim().min(1, "Nome do produto é obrigatório."),
   fotoUrl: z.string().url().optional().nullable(),
-  tituloMl: z.string().trim().max(60).optional().nullable(),
-  tituloShopee: z.string().trim().max(120).optional().nullable(),
+  // Trunca no limite do marketplace (ML 60 / Shopee 120) em vez de rejeitar —
+  // a IA às vezes gera título mais longo; o publish também corta, então
+  // guardamos o valor já no tamanho válido sem estourar 400.
+  tituloMl: z
+    .string()
+    .trim()
+    .transform((s) => s.slice(0, 60))
+    .optional()
+    .nullable(),
+  tituloShopee: z
+    .string()
+    .trim()
+    .transform((s) => s.slice(0, 120))
+    .optional()
+    .nullable(),
   descricao: z.string().optional().nullable(),
   categoriaMlId: z.string().optional().nullable(),
   categoriaShopeeId: z.coerce.number().int().positive().optional().nullable(),

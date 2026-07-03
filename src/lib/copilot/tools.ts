@@ -75,8 +75,15 @@ export const COPILOT_TOOLS: MiniMaxTool[] = [
 
 const atualizarSchema = z.object({
   resumo: z.string().optional(),
-  tituloMl: z.string().max(60).optional(),
-  tituloShopee: z.string().max(120).optional(),
+  // Trunca no limite do marketplace em vez de rejeitar a proposta da IA.
+  tituloMl: z
+    .string()
+    .transform((s) => s.slice(0, 60))
+    .optional(),
+  tituloShopee: z
+    .string()
+    .transform((s) => s.slice(0, 120))
+    .optional(),
   descricao: z.string().optional(),
   categoriaMlId: z.string().optional(),
   categoriaShopeeId: z.number().int().positive().optional(),
