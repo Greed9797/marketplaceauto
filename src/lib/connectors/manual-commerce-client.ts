@@ -300,6 +300,14 @@ function sheetGidFromUrl(value: string, fallback?: string) {
   }
 }
 
+function googleSheetsExportUrl(sheetId: string, gid: string) {
+  return new URL(
+    `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv&gid=${encodeURIComponent(
+      gid,
+    )}`,
+  );
+}
+
 function googleSheetsCsvUrl(credentials: ConnectorCredentialPayload) {
   const baseUrl = credentialString(credentials, "baseUrl");
   if (!baseUrl) {
@@ -310,11 +318,7 @@ function googleSheetsCsvUrl(credentials: ConnectorCredentialPayload) {
   const sheetId = sheetIdFromUrl(baseUrl);
   const sheetGid = sheetGidFromUrl(baseUrl, gid);
 
-  return new URL(
-    `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv&gid=${encodeURIComponent(
-      sheetGid,
-    )}`,
-  );
+  return googleSheetsExportUrl(sheetId, sheetGid);
 }
 
 function parseCsvRows(csv: string) {
@@ -932,7 +936,94 @@ export class ManualCommerceClient {
     return { ok: true };
   }
 
+  // GOOGLE_SHEETS keeps one tab (gid) per month. The configured URL only points
+  // at a single tab, so a naive fetch ingests one month and silently drops the
+  // rest. Discover every tab from the spreadsheet's htmlview and read them all,
+  // falling back to the single configured gid if discovery fails (never worse
+  // than the previous single-tab behavior).
+  private async discoverGoogleSheetGids(sheetId: string, baseUrl: string) {
+    const fallbackGid = sheetGidFromUrl(
+      baseUrl,
+      credentialString(this.credentials, "ordersPath"),
+    );
+
+    try {
+      const response = await callWithRetry(() =>
+        this.fetchImpl(
+          new URL(`https://docs.google.com/spreadsheets/d/${sheetId}/htmlview`),
+          { headers: buildHeaders(this.provider, this.credentials) },
+        ),
+      );
+
+      if (response.ok) {
+        const html = await response.text();
+        const gids = new Set<string>();
+        for (const match of html.matchAll(/gid[=:"]{1,3}(\d{5,12})/g)) {
+          gids.add(match[1]);
+        }
+        if (gids.size > 0) {
+          // Always include the configured tab in case the regex missed it.
+          gids.add(fallbackGid);
+          return Array.from(gids);
+        }
+      }
+    } catch {
+      // htmlview unreachable/unparseable — fall back to the single configured tab.
+    }
+
+    return [fallbackGid];
+  }
+
+  private async fetchGoogleSheetsOrders() {
+    const baseUrl = credentialString(this.credentials, "baseUrl");
+    if (!baseUrl) {
+      throw new Error("GOOGLE_SHEETS baseUrl is required");
+    }
+    const sheetId = sheetIdFromUrl(baseUrl);
+    const gids = await this.discoverGoogleSheetGids(sheetId, baseUrl);
+
+    // Re-ingest every month present in the spreadsheet on each sync. Each row is
+    // an idempotent per-day synthetic order (GOOGLE_SHEETS-<dateKey>), so we skip
+    // the date-window filter entirely: old months never disappear and new ones
+    // show up. Dedupe by pedido (dateKey) so overlapping tabs don't double-count
+    // a day — last tab wins.
+    const byPedido = new Map<string, Record<string, unknown>>();
+    let anyOk = false;
+
+    for (const gid of gids) {
+      const response = await callWithRetry(() =>
+        this.fetchImpl(googleSheetsExportUrl(sheetId, gid), {
+          headers: buildHeaders(this.provider, this.credentials),
+        }),
+      );
+
+      if (!response.ok) {
+        // A stale/hidden gid discovered from htmlview may 400 — skip it rather
+        // than failing the whole sync. If EVERY tab fails we throw below.
+        continue;
+      }
+      anyOk = true;
+
+      for (const payload of extractGoogleSheetPayloads(await response.text())) {
+        const key =
+          typeof payload.pedido === "string" && payload.pedido
+            ? payload.pedido
+            : `row-${byPedido.size}`;
+        byPedido.set(key, payload);
+      }
+    }
+
+    if (!anyOk) {
+      throw new Error(`${this.provider} orders failed: no readable sheet tabs`);
+    }
+
+    return Array.from(byPedido.values());
+  }
+
   async listOrders(range: { since: string; until: string }) {
+    if (this.provider === ConnectorProvider.GOOGLE_SHEETS) {
+      return this.fetchGoogleSheetsOrders();
+    }
     if (this.provider === ConnectorProvider.WBUY) {
       return this.fetchWbuyOrders(range);
     }
@@ -960,10 +1051,6 @@ export class ManualCommerceClient {
       throw new Error(
         `${this.provider} orders failed with status ${response.status}${suffix}`,
       );
-    }
-
-    if (this.provider === ConnectorProvider.GOOGLE_SHEETS) {
-      return extractGoogleSheetPayloads(await response.text(), range);
     }
 
     return extractOrderPayloads(await response.json());

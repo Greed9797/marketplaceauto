@@ -281,8 +281,12 @@ describe("documented ecommerce API clients", () => {
       until: "2026-05-18",
     });
 
-    const [url] = fetchMock.mock.calls[0] as unknown as [URL, RequestInit];
-    expect(url.toString()).toBe(
+    // Tabs are discovered via htmlview first; when it yields no gids the client
+    // falls back to the single configured gid — never worse than single-tab.
+    const exportCall = (
+      fetchMock.mock.calls as unknown as Array<[URL, RequestInit]>
+    ).find(([u]) => String(u).includes("/export"));
+    expect(String(exportCall?.[0])).toBe(
       "https://docs.google.com/spreadsheets/d/14h4veQ1W9Qfv5mHGyFqcwdBDLwIDUKlV/export?format=csv&gid=1004138552",
     );
     expect(orders).toEqual([
@@ -331,6 +335,53 @@ describe("documented ecommerce API clients", () => {
         qtd_vendas: "0",
         items_count: "0",
       },
+    ]);
+  });
+
+  it("ingests every monthly tab discovered via htmlview, not just the configured one", async () => {
+    // One tab (gid) per month. htmlview exposes both gids; each CSV export holds
+    // that month's daily rows. All months must be ingested (June AND July).
+    const juneCsv =
+      'Calê Joias,,,\nDia,Qtd. Vendas,Valor em vendas,Ticket Médio\n10/06/2026,3,"R$ 900,00","R$ 300,00"\n';
+    const julyCsv =
+      'Calê Joias,,,\nDia,Qtd. Vendas,Valor em vendas,Ticket Médio\n05/07/2026,2,"R$ 500,00","R$ 250,00"\n';
+    const htmlview =
+      '<a href="#gid=1051558490">Junho</a><a href="#gid=2091893132">Julho</a>';
+
+    const fetchMock = vi.fn(async (input: URL | RequestInfo) => {
+      const href = String(input);
+      if (href.includes("/htmlview")) {
+        return new Response(htmlview);
+      }
+      if (href.includes("gid=1051558490")) {
+        return new Response(juneCsv);
+      }
+      if (href.includes("gid=2091893132")) {
+        return new Response(julyCsv);
+      }
+      return new Response("", { status: 404 });
+    });
+
+    const client = new ManualCommerceClient({
+      provider: ConnectorProvider.GOOGLE_SHEETS,
+      credentials: {
+        baseUrl:
+          "https://docs.google.com/spreadsheets/d/14h4veQ1W9Qfv5mHGyFqcwdBDLwIDUKlV/edit?gid=1051558490",
+      },
+      fetchImpl: fetchMock as unknown as typeof fetch,
+    });
+
+    const orders = await client.listOrders({
+      // Range is intentionally narrow — GOOGLE_SHEETS ignores it and ingests all
+      // tabs so past months never drop out of the dashboard.
+      since: "2026-07-01",
+      until: "2026-07-31",
+    });
+
+    const pedidos = orders.map((order) => order.pedido).sort();
+    expect(pedidos).toEqual([
+      "GOOGLE_SHEETS-2026-06-10",
+      "GOOGLE_SHEETS-2026-07-05",
     ]);
   });
 });

@@ -678,7 +678,7 @@ export async function buildShopifyConfigFromProviderConfig(
       // read_inventory powers the catalog stock pull (ProductVariant.inventoryQuantity);
       // read_products covers productType (category). Connections authorized before
       // read_inventory was added fall back to category-only in listProducts.
-      "read_orders,read_products,read_inventory,read_customers,read_analytics",
+      "read_orders,read_all_orders,read_products,read_inventory,read_customers,read_analytics",
     apiVersion: config.apiVersion?.trim() || "2026-04",
   };
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   CalendarDays,
   ChevronLeft,
@@ -126,7 +126,41 @@ export function DashboardFilterBar({
     period.preset === "custom",
   );
   const [calendarOpen, setCalendarOpen] = useState(false);
+  const calendarPanelRef = useRef<HTMLDivElement>(null);
+  const calendarToggleRef = useRef<HTMLDivElement>(null);
   const isCustomPeriod = customControlsOpen || period.preset === "custom";
+
+  useEffect(() => {
+    if (!calendarOpen) {
+      return;
+    }
+
+    function handlePointerDown(event: MouseEvent) {
+      const target = event.target as Node;
+      // Ignore clicks on the toggle buttons — their own handler manages open/close.
+      if (
+        calendarPanelRef.current?.contains(target) ||
+        calendarToggleRef.current?.contains(target)
+      ) {
+        return;
+      }
+      setCalendarOpen(false);
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setCalendarOpen(false);
+      }
+    }
+
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [calendarOpen]);
   const [visibleMonth, setVisibleMonth] = useState(monthStart(period.to));
   const days = useMemo(() => calendarDays(visibleMonth), [visibleMonth]);
   const monthLabel = `${monthNames[visibleMonth.getUTCMonth()]} ${visibleMonth.getUTCFullYear()}`;
@@ -223,7 +257,7 @@ export function DashboardFilterBar({
               <span className="text-caption text-[var(--text-tertiary)]">
                 Período
               </span>
-              <div className="mt-1 flex gap-2">
+              <div className="mt-1 flex gap-2" ref={calendarToggleRef}>
                 <button
                   className="inline-flex h-10 flex-1 items-center rounded-md border border-[var(--border-strong)] bg-[var(--bg-surface)] px-3 text-left text-sm font-semibold text-[var(--text-primary)]"
                   onClick={() => setCalendarOpen((open) => !open)}
@@ -246,6 +280,7 @@ export function DashboardFilterBar({
                 <div
                   className="fixed left-4 top-20 z-[1000] w-[360px] max-w-[calc(100vw-2rem)] rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-4 text-[var(--text-primary)] shadow-lg"
                   data-calendar-panel="true"
+                  ref={calendarPanelRef}
                 >
                   <div className="mb-4 flex items-center justify-between">
                     <Button

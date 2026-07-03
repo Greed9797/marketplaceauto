@@ -2,6 +2,7 @@ import { createHmac } from "node:crypto";
 import { describe, expect, it } from "vitest";
 
 import {
+  SHOPIFY_DEFAULT_SCOPES,
   buildShopifyOAuthUrl,
   normalizeShopDomain,
   verifyShopifyQueryHmac,
@@ -21,7 +22,13 @@ describe("Shopify OAuth helpers", () => {
       "loja-teste.myshopify.com",
     );
     expect(normalizeShopDomain("loja-teste")).toBe("loja-teste.myshopify.com");
-    expect(() => normalizeShopDomain("bad host")).toThrow("Invalid Shopify shop domain");
+    expect(() => normalizeShopDomain("bad host")).toThrow(
+      "Invalid Shopify shop domain",
+    );
+  });
+
+  it("requests read_all_orders so the Admin API returns orders older than 60 days", () => {
+    expect(SHOPIFY_DEFAULT_SCOPES.split(",")).toContain("read_all_orders");
   });
 
   it("builds the shop authorization URL", () => {
@@ -35,7 +42,9 @@ describe("Shopify OAuth helpers", () => {
     expect(url.pathname).toBe("/admin/oauth/authorize");
     expect(url.searchParams.get("client_id")).toBe("shopify-key");
     expect(url.searchParams.get("scope")).toBe("read_orders,read_products");
-    expect(url.searchParams.get("redirect_uri")).toBe(shopifyConfig.redirectUri);
+    expect(url.searchParams.get("redirect_uri")).toBe(
+      shopifyConfig.redirectUri,
+    );
     expect(url.searchParams.get("state")).toBe("csrf-state");
   });
 
@@ -50,7 +59,9 @@ describe("Shopify OAuth helpers", () => {
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([key, value]) => `${key}=${value}`)
       .join("&");
-    const hmac = createHmac("sha256", "shopify-secret").update(message).digest("hex");
+    const hmac = createHmac("sha256", "shopify-secret")
+      .update(message)
+      .digest("hex");
     params.set("hmac", hmac);
 
     expect(verifyShopifyQueryHmac(params, "shopify-secret")).toBe(true);

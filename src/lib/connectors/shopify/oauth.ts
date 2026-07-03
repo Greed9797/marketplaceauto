@@ -1,7 +1,8 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 
 export const SHOPIFY_DEFAULT_API_VERSION = "2026-04";
-export const SHOPIFY_DEFAULT_SCOPES = "read_orders,read_products,read_customers,read_analytics";
+export const SHOPIFY_DEFAULT_SCOPES =
+  "read_orders,read_all_orders,read_products,read_customers,read_analytics";
 
 export type ShopifyConfig = {
   apiVersion: string;
@@ -29,9 +30,11 @@ export function normalizeShopDomain(value: string) {
   return shop;
 }
 
-export function buildShopifyOAuthUrl(
-  input: { shop: string; state: string; config: ShopifyConfig },
-) {
+export function buildShopifyOAuthUrl(input: {
+  shop: string;
+  state: string;
+  config: ShopifyConfig;
+}) {
   const shop = normalizeShopDomain(input.shop);
   const url = new URL(`https://${shop}/admin/oauth/authorize`);
 
@@ -51,13 +54,18 @@ function shopifyHmacMessage(params: URLSearchParams) {
     .join("&");
 }
 
-export function verifyShopifyQueryHmac(params: URLSearchParams, secret: string) {
+export function verifyShopifyQueryHmac(
+  params: URLSearchParams,
+  secret: string,
+) {
   const hmac = params.get("hmac");
   if (!hmac) {
     return false;
   }
 
-  const digest = createHmac("sha256", secret).update(shopifyHmacMessage(params)).digest("hex");
+  const digest = createHmac("sha256", secret)
+    .update(shopifyHmacMessage(params))
+    .digest("hex");
   const received = Buffer.from(hmac, "hex");
   const expected = Buffer.from(digest, "hex");
 
@@ -68,12 +76,18 @@ export function verifyShopifyQueryHmac(params: URLSearchParams, secret: string) 
   return timingSafeEqual(received, expected);
 }
 
-export function verifyShopifyWebhookHmac(rawBody: string, hmacHeader: string | null, secret: string) {
+export function verifyShopifyWebhookHmac(
+  rawBody: string,
+  hmacHeader: string | null,
+  secret: string,
+) {
   if (!hmacHeader) {
     return false;
   }
 
-  const digest = createHmac("sha256", secret).update(rawBody, "utf8").digest("base64");
+  const digest = createHmac("sha256", secret)
+    .update(rawBody, "utf8")
+    .digest("base64");
   const received = Buffer.from(hmacHeader, "base64");
   const expected = Buffer.from(digest, "base64");
 

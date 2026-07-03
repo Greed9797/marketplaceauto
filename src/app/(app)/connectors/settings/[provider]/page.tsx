@@ -356,7 +356,7 @@ function ProviderSpecificFields({
           label="Scopes"
           defaultValue={
             config?.scopes ??
-            "read_orders,read_products,read_customers,read_analytics"
+            "read_orders,read_all_orders,read_products,read_customers,read_analytics"
           }
         />
       </>
