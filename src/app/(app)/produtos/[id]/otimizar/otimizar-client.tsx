@@ -122,7 +122,9 @@ function ScoreGauge({ score }: { score: number }) {
           strokeLinecap="round"
           strokeDasharray={circumference}
           strokeDashoffset={offset}
-          style={{ transition: "stroke-dashoffset 0.5s cubic-bezier(0.22,1,0.36,1)" }}
+          style={{
+            transition: "stroke-dashoffset 0.5s cubic-bezier(0.22,1,0.36,1)",
+          }}
         />
       </svg>
       <div className="absolute grid place-items-center text-center">
@@ -142,6 +144,11 @@ function ScoreGauge({ score }: { score: number }) {
     </div>
   );
 }
+
+// Glass líquido: fundo translúcido + backdrop-blur + borda sutil. twMerge
+// troca o bg padrão do Card. Minimalista/futurista, sobre um glow de marca.
+const glassCls =
+  "border-[color-mix(in_oklab,var(--text-primary)_12%,transparent)] bg-[color-mix(in_oklab,var(--bg-surface)_58%,transparent)] shadow-xl backdrop-blur-2xl backdrop-saturate-150";
 
 const inputCls =
   "h-10 w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-3.5 text-sm text-[var(--text-primary)] outline-none transition-colors placeholder:text-[var(--text-tertiary)] hover:border-[var(--border-strong)] focus:border-[var(--w3-red)] focus:bg-[var(--bg-surface)] focus:ring-[3px] focus:ring-[var(--w3-red-bg)]";
@@ -861,9 +868,18 @@ export function OtimizarClient({
         </Card>
       </div>
 
-      {/* Painel lateral */}
-      <div className="space-y-4">
-        <Card className="border-[var(--w3-red-bg)] shadow-sm ring-1 ring-[var(--w3-red-bg)] xl:sticky xl:top-4">
+      {/* Painel lateral — glass líquido sobre glow de marca */}
+      <div className="relative space-y-4">
+        {/* Glow futurista atrás do vidro (blur suave, tint da marca) */}
+        <div
+          aria-hidden
+          className="pointer-events-none absolute -inset-x-6 -top-8 -z-10 h-72 rounded-full opacity-70 blur-3xl"
+          style={{
+            background:
+              "radial-gradient(60% 60% at 70% 20%, var(--w3-red-bg), transparent 70%)",
+          }}
+        />
+        <Card className={cn(glassCls, "ring-1 ring-[var(--w3-red-bg)] xl:sticky xl:top-4")}>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Gauge className="size-4 text-[var(--w3-red)]" />
@@ -960,7 +976,7 @@ export function OtimizarClient({
         </Card>
 
         {/* Otimização automática (eval harness M3) */}
-        <Card>
+        <Card className={glassCls}>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Wand2 className="size-4 text-[var(--w3-red)]" />
@@ -1023,7 +1039,7 @@ export function OtimizarClient({
         </Card>
 
         {/* Publicar */}
-        <Card>
+        <Card className={glassCls}>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Rocket className="size-4 text-[var(--w3-red)]" />
