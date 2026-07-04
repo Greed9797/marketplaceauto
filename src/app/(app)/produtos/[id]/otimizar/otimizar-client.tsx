@@ -525,7 +525,16 @@ export function OtimizarClient({
   }
 
   return (
-    <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
+    <div className="relative grid gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
+      {/* Glow ambiente da página inteira (atrás de todo o vidro) */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -inset-x-10 -top-16 -z-10 h-96 rounded-full opacity-60 blur-3xl"
+        style={{
+          background:
+            "radial-gradient(50% 50% at 30% 10%, var(--w3-red-bg), transparent 70%)",
+        }}
+      />
       <div className="space-y-5">
         {/* Galeria */}
         <Card>
@@ -723,7 +732,7 @@ export function OtimizarClient({
         </Card>
 
         {/* Ficha técnica dirigida pelos atributos obrigatórios */}
-        <Card>
+        <Card className={glassCls}>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <ListChecks className="size-4 text-[var(--text-tertiary)]" />
@@ -794,7 +803,7 @@ export function OtimizarClient({
         </Card>
 
         {/* Embalagem (Shopee exige) */}
-        <Card>
+        <Card className={glassCls}>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Package className="size-4 text-[var(--text-tertiary)]" />
@@ -879,7 +888,12 @@ export function OtimizarClient({
               "radial-gradient(60% 60% at 70% 20%, var(--w3-red-bg), transparent 70%)",
           }}
         />
-        <Card className={cn(glassCls, "ring-1 ring-[var(--w3-red-bg)] xl:sticky xl:top-4")}>
+        <Card
+          className={cn(
+            glassCls,
+            "ring-1 ring-[var(--w3-red-bg)] xl:sticky xl:top-4",
+          )}
+        >
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Gauge className="size-4 text-[var(--w3-red)]" />
