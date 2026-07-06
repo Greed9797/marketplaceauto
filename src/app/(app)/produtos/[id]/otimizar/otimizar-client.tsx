@@ -148,7 +148,7 @@ function ScoreGauge({ score }: { score: number }) {
 // Glass líquido: fundo translúcido + backdrop-blur + borda sutil. twMerge
 // troca o bg padrão do Card. Minimalista/futurista, sobre um glow de marca.
 const glassCls =
-  "border-[color-mix(in_oklab,var(--text-primary)_12%,transparent)] bg-[color-mix(in_oklab,var(--bg-surface)_58%,transparent)] shadow-xl backdrop-blur-2xl backdrop-saturate-150";
+  "border-[color-mix(in_oklab,var(--text-primary)_10%,transparent)] bg-[color-mix(in_oklab,var(--bg-surface)_42%,transparent)] backdrop-blur-2xl backdrop-saturate-[1.8] shadow-[inset_0_1px_0_0_rgba(255,255,255,0.55),0_16px_50px_-12px_rgba(0,0,0,0.35)]";
 
 const inputCls =
   "h-10 w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-3.5 text-sm text-[var(--text-primary)] outline-none transition-colors placeholder:text-[var(--text-tertiary)] hover:border-[var(--border-strong)] focus:border-[var(--w3-red)] focus:bg-[var(--bg-surface)] focus:ring-[3px] focus:ring-[var(--w3-red-bg)]";
@@ -529,10 +529,10 @@ export function OtimizarClient({
       {/* Glow ambiente da página inteira (atrás de todo o vidro) */}
       <div
         aria-hidden
-        className="pointer-events-none absolute -inset-x-10 -top-16 -z-10 h-96 rounded-full opacity-60 blur-3xl"
+        className="pointer-events-none absolute -inset-x-10 -top-16 -z-10 h-[30rem] rounded-full opacity-90 blur-3xl"
         style={{
           background:
-            "radial-gradient(50% 50% at 30% 10%, var(--w3-red-bg), transparent 70%)",
+            "radial-gradient(50% 50% at 28% 8%, color-mix(in oklab, var(--w3-red) 34%, transparent), transparent 72%)",
         }}
       />
       <div className="space-y-5">
@@ -882,10 +882,10 @@ export function OtimizarClient({
         {/* Glow futurista atrás do vidro (blur suave, tint da marca) */}
         <div
           aria-hidden
-          className="pointer-events-none absolute -inset-x-6 -top-8 -z-10 h-72 rounded-full opacity-70 blur-3xl"
+          className="pointer-events-none absolute -inset-x-6 -top-8 -z-10 h-80 rounded-full opacity-90 blur-3xl"
           style={{
             background:
-              "radial-gradient(60% 60% at 70% 20%, var(--w3-red-bg), transparent 70%)",
+              "radial-gradient(60% 60% at 70% 20%, color-mix(in oklab, var(--w3-red) 30%, transparent), transparent 72%)",
           }}
         />
         <Card
