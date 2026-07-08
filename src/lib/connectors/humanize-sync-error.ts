@@ -32,6 +32,7 @@ const PROVIDER_LABEL: Record<ConnectorProvider, string> = {
   SHOPEE: "Shopee",
   SHOPEE_ADS: "Shopee Ads",
   MERCADO_LIVRE_ADS: "Mercado Livre Ads",
+  LEVANE: "Levane",
 };
 
 type Rule = {
