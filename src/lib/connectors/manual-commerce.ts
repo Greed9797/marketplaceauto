@@ -317,6 +317,7 @@ export function normalizeManualCommerceOrder(
   const itemsCount =
     firstFiniteInteger(
       payload.items_count,
+      payload.total_items,
       payload.total_itens,
       payload.qtd_vendas,
       payload.quantidade_vendas,

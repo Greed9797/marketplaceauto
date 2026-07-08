@@ -76,6 +76,26 @@ describe("manual ecommerce connectors", () => {
     });
   });
 
+  it("maps a Levane (Supabase PostgREST) order, reading total_items as itemsCount", () => {
+    expect(
+      normalizeManualCommerceOrder({
+        id: "o1",
+        total: "150.00",
+        total_items: 3,
+        status: "paid",
+        user_id: "u1",
+        created_at: "2026-05-10T12:00:00.000Z",
+      }),
+    ).toMatchObject({
+      externalOrderId: "o1",
+      orderTotal: "150.00",
+      orderCurrency: "BRL",
+      itemsCount: 3,
+      status: "paid",
+      placedAt: "2026-05-10T12:00:00.000Z",
+    });
+  });
+
   it("maps WhatsApp Google Sheets rows into approved orders", () => {
     expect(
       normalizeManualCommerceOrder({

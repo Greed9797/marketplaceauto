@@ -271,6 +271,7 @@ enum ConnectorProvider {
   SHOPEE
   SHOPEE_ADS
   MERCADO_LIVRE_ADS
+  LEVANE
 }
 
 enum ConnectorStatus {

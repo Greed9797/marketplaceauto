@@ -384,4 +384,77 @@ describe("documented ecommerce API clients", () => {
       "GOOGLE_SHEETS-2026-07-05",
     ]);
   });
+
+  it("logs into Supabase then reads Levane orders off PostgREST with apikey+Bearer", async () => {
+    const login = Response.json({ access_token: "levane-user-token" });
+    const page = Response.json([
+      {
+        id: "o1",
+        total: "150.00",
+        total_items: 3,
+        status: "paid",
+        user_id: "u1",
+        created_at: "2026-05-10T12:00:00Z",
+      },
+    ]);
+    // fetchLevaneOrders advances by the returned row count and only stops on an
+    // empty page (robust against a low db-max-rows cap), so a 2nd empty page is
+    // fetched after the single-row first page.
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(login)
+      .mockResolvedValueOnce(page)
+      .mockResolvedValueOnce(Response.json([]));
+
+    const client = new ManualCommerceClient({
+      provider: ConnectorProvider.LEVANE,
+      credentials: {
+        baseUrl: "https://eoelqiozwcliqwavuhix.supabase.co",
+        apiKey: "anon-key",
+        apiUser: "buyer@levane.com.br",
+        apiPassword: "s3cret",
+      },
+      fetchImpl: fetchMock as unknown as typeof fetch,
+    });
+
+    const orders = await client.listOrders({
+      since: "2026-05-01T00:00:00.000Z",
+      until: "2026-06-01T00:00:00.000Z",
+    });
+
+    // 1st call: Supabase password-grant login.
+    const [loginUrl, loginInit] = fetchMock.mock.calls[0] as unknown as [
+      URL,
+      RequestInit,
+    ];
+    expect(loginUrl.toString()).toBe(
+      "https://eoelqiozwcliqwavuhix.supabase.co/auth/v1/token?grant_type=password",
+    );
+    expect(loginInit.method).toBe("POST");
+    expect(loginInit.headers).toMatchObject({ apikey: "anon-key" });
+    expect(JSON.parse(String(loginInit.body))).toEqual({
+      email: "buyer@levane.com.br",
+      password: "s3cret",
+    });
+
+    // 2nd call: PostgREST orders — anon apikey + user Bearer + range filter.
+    const [ordersUrl, ordersInit] = fetchMock.mock.calls[1] as unknown as [
+      URL,
+      RequestInit,
+    ];
+    const u = ordersUrl.toString();
+    expect(u).toContain("/rest/v1/orders");
+    expect(u).toContain(
+      "select=id%2Ctotal%2Ctotal_items%2Cstatus%2Cuser_id%2Ccreated_at",
+    );
+    expect(u).toContain("created_at=gte.2026-05-01T00%3A00%3A00.000Z");
+    expect(u).toContain("created_at=lt.2026-06-01T00%3A00%3A00.000Z");
+    expect(ordersInit.headers).toMatchObject({
+      apikey: "anon-key",
+      Authorization: "Bearer levane-user-token",
+    });
+
+    expect(orders).toHaveLength(1);
+    expect(orders[0]).toMatchObject({ id: "o1", total_items: 3 });
+  });
 });

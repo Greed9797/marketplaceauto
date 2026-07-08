@@ -175,6 +175,9 @@ function providerOrdersPath(
     case ConnectorProvider.MAGAZORD:
       // Magazord OpenAPI: GET /api/v2/site/pedido (singular, with /api prefix).
       return "/api/v2/site/pedido";
+    case ConnectorProvider.LEVANE:
+      // Levane runs on Supabase; orders are read straight off PostgREST.
+      return "/rest/v1/orders";
     case ConnectorProvider.LOJA_INTEGRADA:
       // Loja Integrada (Django Tastypie): GET /pedido/search/ — trailing slash
       // kept so Tastypie doesn't 301-redirect and drop the query string.
@@ -557,6 +560,9 @@ export class ManualCommerceClient {
   private readonly provider: ConnectorProvider;
   private readonly credentials: ConnectorCredentialPayload;
   private readonly fetchImpl: FetchLike;
+  // Levane (Supabase) auth is a password-grant token exchange, not a static
+  // header. Cached per client instance so one sync run logs in once.
+  private levaneAccessToken?: string;
 
   constructor(input: {
     provider: ConnectorProvider;
@@ -818,6 +824,145 @@ export class ManualCommerceClient {
     return collected;
   }
 
+  // Levane: exchange email/password for a Supabase access token (password grant).
+  // The anon key (apiKey) unlocks the REST gateway; the user token satisfies RLS
+  // so the store account sees every order. Cached for the client's lifetime.
+  private async resolveLevaneAccessToken(): Promise<string> {
+    if (this.levaneAccessToken) {
+      return this.levaneAccessToken;
+    }
+
+    // Reuse the generic manual-commerce credential keys that already flow
+    // end-to-end: apiKey = Supabase anon key, apiUser = login email,
+    // apiPassword = login password. No new fields across the connect pipeline.
+    const anonKey = credentialString(this.credentials, "apiKey");
+    const email = credentialString(this.credentials, "apiUser");
+    const password = credentialString(this.credentials, "apiPassword");
+    if (!anonKey || !email || !password) {
+      throw new Error(
+        "LEVANE requires apiKey (anon), apiUser (email) and apiPassword",
+      );
+    }
+
+    const url = new URL(
+      appendPath(
+        providerBaseUrl(this.provider, this.credentials),
+        "/auth/v1/token",
+      ),
+    );
+    url.searchParams.set("grant_type", "password");
+
+    const response = await callWithRetry(() =>
+      this.fetchImpl(url, {
+        method: "POST",
+        headers: {
+          apikey: anonKey,
+          "Content-Type": "application/json",
+          Accept: "application/json",
+          "User-Agent": DEFAULT_USER_AGENT,
+        },
+        body: JSON.stringify({ email, password }),
+      }),
+    );
+
+    if (!response.ok) {
+      // 400 here almost always means the client rotated the password → the
+      // connector needs a manual reconnect (surfaced via humanize-sync-error).
+      throw new Error(`LEVANE login failed with status ${response.status}`);
+    }
+
+    const data = (await response.json()) as { access_token?: unknown };
+    if (typeof data.access_token !== "string" || !data.access_token) {
+      throw new Error("LEVANE login returned no access_token");
+    }
+
+    this.levaneAccessToken = data.access_token;
+    return data.access_token;
+  }
+
+  private async levaneHeaders(): Promise<Record<string, string>> {
+    const anonKey = credentialString(this.credentials, "apiKey") ?? "";
+    const token = await this.resolveLevaneAccessToken();
+    return {
+      Accept: "application/json",
+      "User-Agent": DEFAULT_USER_AGENT,
+      apikey: anonKey,
+      Authorization: `Bearer ${token}`,
+    };
+  }
+
+  private levaneOrdersUrl(input: {
+    range?: { since: string; until: string };
+    limit: number;
+    offset: number;
+  }) {
+    const url = new URL(
+      appendPath(
+        providerBaseUrl(this.provider, this.credentials),
+        providerOrdersPath(this.provider, this.credentials),
+      ),
+    );
+    // Explicit PostgREST column list keeps the payload small and stable.
+    url.searchParams.set(
+      "select",
+      "id,total,total_items,status,user_id,created_at",
+    );
+    url.searchParams.set("order", "created_at.desc");
+    if (input.range) {
+      // PostgREST range filter — repeated `created_at` key ANDs the bounds.
+      // Full ISO timestamps are fine against a timestamptz column.
+      url.searchParams.append("created_at", `gte.${input.range.since}`);
+      url.searchParams.append("created_at", `lt.${input.range.until}`);
+    }
+    url.searchParams.set("limit", String(input.limit));
+    url.searchParams.set("offset", String(input.offset));
+    return url;
+  }
+
+  private async fetchLevaneOrders(range: { since: string; until: string }) {
+    const pageSize = 1000; // PostgREST common db-max-rows ceiling.
+    const MAX_PAGES = 50; // 50k orders/window safety cap.
+    const headers = await this.levaneHeaders();
+    const collected: Record<string, unknown>[] = [];
+    let offset = 0;
+
+    for (let page = 0; page < MAX_PAGES; page += 1) {
+      const response = await callWithRetry(() =>
+        this.fetchImpl(
+          this.levaneOrdersUrl({ range, limit: pageSize, offset }),
+          {
+            headers,
+          },
+        ),
+      );
+
+      if (!response.ok) {
+        let body = "";
+        try {
+          body = (await response.text()).slice(0, 300);
+        } catch {
+          // body unreadable
+        }
+        const suffix = body ? ` | body: ${body}` : "";
+        throw new Error(
+          `${this.provider} orders failed with status ${response.status}${suffix}`,
+        );
+      }
+
+      const payload = extractOrderPayloads(await response.json());
+      if (payload.length === 0) {
+        break;
+      }
+      collected.push(...payload);
+      // Advance by the ACTUAL row count, not the requested pageSize: if the
+      // server's db-max-rows caps below pageSize, assuming pageSize would stop
+      // paging one short and drop orders.
+      offset += payload.length;
+    }
+
+    return collected;
+  }
+
   private lojaIntegradaOrdersUrl(input: {
     range: { since: string; until: string };
     offset: number;
@@ -909,6 +1054,24 @@ export class ManualCommerceClient {
     if (this.provider === ConnectorProvider.WBUY) {
       const response = await this.fetchWbuyResponse(
         this.wbuyOrdersUrls({ offset: 0, pageSize: 1 }),
+      );
+
+      if (!response.ok) {
+        throw new Error(
+          `${this.provider} credentials failed with status ${response.status}`,
+        );
+      }
+
+      return { ok: true };
+    }
+
+    if (this.provider === ConnectorProvider.LEVANE) {
+      // levaneHeaders() logs in, so a 400 here already surfaces bad credentials.
+      const headers = await this.levaneHeaders();
+      const response = await callWithRetry(() =>
+        this.fetchImpl(this.levaneOrdersUrl({ limit: 1, offset: 0 }), {
+          headers,
+        }),
       );
 
       if (!response.ok) {
@@ -1032,6 +1195,9 @@ export class ManualCommerceClient {
     }
     if (this.provider === ConnectorProvider.LOJA_INTEGRADA) {
       return this.fetchLojaIntegradaOrders(range);
+    }
+    if (this.provider === ConnectorProvider.LEVANE) {
+      return this.fetchLevaneOrders(range);
     }
 
     const response = await callWithRetry(() =>

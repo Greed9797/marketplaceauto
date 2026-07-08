@@ -28,6 +28,7 @@ describe("connector registry", () => {
         ConnectorProvider.SHOPEE,
         ConnectorProvider.SHOPEE_ADS,
         ConnectorProvider.MERCADO_LIVRE_ADS,
+        ConnectorProvider.LEVANE,
       ].sort(),
     );
   });
@@ -51,6 +52,7 @@ describe("connector registry", () => {
       ConnectorProvider.MAGAZORD,
       ConnectorProvider.GOOGLE_SHEETS,
       ConnectorProvider.LOJA_INTEGRADA,
+      ConnectorProvider.LEVANE,
     ]);
   });
 });

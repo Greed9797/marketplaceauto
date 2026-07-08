@@ -2,67 +2,81 @@ import { describe, expect, test } from "vitest";
 
 import { calcularScore } from "@/lib/publisher/listing-score";
 
+const anuncioBom = {
+  tituloMl: "Kit 5 Calças Legging Infantil Menina Algodão Escola",
+  descricao: "x".repeat(320),
+  imagens: ["a.jpg", "b.jpg", "c.jpg"],
+  atributos: { Marca: "W3", Material: "Algodão", Tamanho: "M" },
+  categoriaMlId: "MLB1234",
+  preco: 79.9,
+  quantidade: 10,
+};
+
 describe("calcularScore", () => {
-  test("anúncio vazio = 0", () => {
+  test("anúncio vazio = 0 e todas as dicas preenchidas", () => {
     const { score, breakdown } = calcularScore({});
     expect(score).toBe(0);
-    // toda dica preenchida quando vazio
     expect(breakdown.every((c) => c.dica !== null)).toBe(true);
   });
 
-  test("anúncio completo = 100", () => {
-    const { score } = calcularScore({
-      tituloMl: "Kit 5 Calças Legging Infantil Menina Algodão Escola",
-      descricao: "x".repeat(320),
-      imagens: ["a.jpg", "b.jpg", "c.jpg"],
-      atributos: {
-        marca: "W3",
-        material: "Algodão",
-        tamanho: "M",
-        cor: "Sortido",
-        genero: "Feminino",
-      },
-      categoriaMlId: "MLB1234",
-      preco: 79.9,
-      quantidade: 10,
+  test("sem requisitos reais NÃO chega a 100 (não engana o usuário)", () => {
+    const { score, breakdown } = calcularScore(anuncioBom);
+    expect(score).toBeLessThan(100);
+    // O gate real "Pronto para publicar" fica 0 sem preview.
+    const pub = breakdown.find((c) => c.criterio === "Pronto para publicar");
+    expect(pub?.pontos).toBe(0);
+    expect(pub?.dica).toContain("otimização");
+  });
+
+  test("100 só com atributos obrigatórios cobertos + gate verde", () => {
+    const { score } = calcularScore(anuncioBom, {
+      requiredAttrNames: ["Marca", "Material"],
+      publicavel: true,
+      pendencias: [],
     });
     expect(score).toBe(100);
   });
 
-  test("1 imagem dá 10 e sugere adicionar 2", () => {
+  test("atributo obrigatório faltando derruba a cobertura e lista o que falta", () => {
+    const { breakdown } = calcularScore(
+      { ...anuncioBom, atributos: { Marca: "W3" } },
+      {
+        requiredAttrNames: ["Marca", "Material"],
+        publicavel: false,
+        pendencias: ["Shopee: peso obrigatório"],
+      },
+    );
+    const attr = breakdown.find((c) => c.criterio === "Atributos obrigatórios");
+    expect(attr?.pontos).toBe(13); // 25 * 1/2 arredondado
+    expect(attr?.dica).toContain("Material");
+    const pub = breakdown.find((c) => c.criterio === "Pronto para publicar");
+    expect(pub?.pontos).toBe(0);
+    expect(pub?.dica).toContain("peso");
+  });
+
+  test("categoria sem atributos obrigatórios = cobertura completa", () => {
+    const { breakdown } = calcularScore(anuncioBom, {
+      requiredAttrNames: [],
+      publicavel: true,
+      pendencias: [],
+    });
+    expect(
+      breakdown.find((c) => c.criterio === "Atributos obrigatórios")?.pontos,
+    ).toBe(25);
+  });
+
+  test("1 imagem dá 8 e sugere adicionar 2", () => {
     const { breakdown } = calcularScore({ imagens: ["a.jpg"] });
     const img = breakdown.find((c) => c.criterio === "Imagens");
-    expect(img?.pontos).toBe(10);
+    expect(img?.pontos).toBe(8);
     expect(img?.dica).toContain("mais 2");
   });
 
-  test("fotoUrl conta como imagem e dedup com galeria", () => {
+  test("fotoUrl dedup com galeria conta como 3 imagens = 15", () => {
     const { breakdown } = calcularScore({
       fotoUrl: "a.jpg",
       imagens: ["a.jpg", "b.jpg", "c.jpg"],
     });
-    // 3 únicas (a dedupada) → 20 pontos
-    expect(breakdown.find((c) => c.criterio === "Imagens")?.pontos).toBe(20);
-  });
-
-  test("título longo demais perde os 8 de comprimento", () => {
-    const { breakdown } = calcularScore({ tituloMl: "x".repeat(80) });
-    const t = breakdown.find((c) => c.criterio === "Título");
-    expect(t?.pontos).toBe(12);
-    expect(t?.dica).toContain("Título longo");
-  });
-
-  test("atributos parciais pontuam proporcional", () => {
-    const { breakdown } = calcularScore({
-      atributos: { marca: "W3", cor: "Azul" },
-    });
-    expect(breakdown.find((c) => c.criterio === "Ficha técnica")?.pontos).toBe(
-      8,
-    );
-  });
-
-  test("categoria Shopee numérica conta", () => {
-    const { breakdown } = calcularScore({ categoriaShopeeId: 100123 });
-    expect(breakdown.find((c) => c.criterio === "Categoria")?.pontos).toBe(10);
+    expect(breakdown.find((c) => c.criterio === "Imagens")?.pontos).toBe(15);
   });
 });

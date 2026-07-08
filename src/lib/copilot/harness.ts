@@ -125,19 +125,6 @@ export async function evaluateListing(input: {
     };
   }
 
-  const { score: completude, breakdown } = calcularScore({
-    tituloMl: produto.tituloMl,
-    tituloShopee: produto.tituloShopee,
-    descricao: produto.descricao,
-    imagens: produto.imagens,
-    fotoUrl: produto.fotoUrl,
-    atributos: produto.atributos,
-    categoriaMlId: produto.categoriaMlId,
-    categoriaShopeeId: produto.categoriaShopeeId,
-    preco: Number(produto.preco),
-    quantidade: produto.quantidade,
-  });
-
   const [ml, shopee] = await Promise.all([
     previewPublishMl({ clienteId: produto.clienteId, produto }).catch(
       () => null,
@@ -161,6 +148,30 @@ export async function evaluateListing(input: {
       : p.validation.problemas.map(
           (x) => `${p.platform === "ml" ? "ML" : "Shopee"}: ${x.mensagem}`,
         ),
+  );
+
+  // Score real: ancorado nos atributos obrigatórios da categoria + gate.
+  const requiredAttrNames = [
+    ...new Set(
+      conectadas.flatMap((p) =>
+        p.requiredAttributes.filter((a) => a.required).map((a) => a.name),
+      ),
+    ),
+  ];
+  const { score: completude, breakdown } = calcularScore(
+    {
+      tituloMl: produto.tituloMl,
+      tituloShopee: produto.tituloShopee,
+      descricao: produto.descricao,
+      imagens: produto.imagens,
+      fotoUrl: produto.fotoUrl,
+      atributos: produto.atributos,
+      categoriaMlId: produto.categoriaMlId,
+      categoriaShopeeId: produto.categoriaShopeeId,
+      preco: Number(produto.preco),
+      quantidade: produto.quantidade,
+    },
+    { requiredAttrNames, publicavel, pendencias },
   );
 
   const juiz = await judgeCopy({

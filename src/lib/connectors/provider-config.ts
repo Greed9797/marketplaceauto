@@ -458,6 +458,23 @@ export function validateProviderConfigInput(input: ProviderConfigInput) {
       }
       return { success: true as const };
     }
+    if (input.provider === ConnectorProvider.LEVANE) {
+      // Levane (Supabase): anon key unlocks REST; apiUser/apiPassword are the
+      // store login exchanged for a token at sync time.
+      if (!hasSecret("apiKey")) {
+        return {
+          success: false as const,
+          error: "Informe a chave anon (apiKey) do Supabase do Levane.",
+        };
+      }
+      if (!hasSecret("apiUser") || !hasSecret("apiPassword")) {
+        return {
+          success: false as const,
+          error: "Informe o e-mail e a senha de login do Levane.",
+        };
+      }
+      return { success: true as const };
+    }
     if (
       !hasSecret("apiKey") &&
       !hasSecret("apiSecret") &&

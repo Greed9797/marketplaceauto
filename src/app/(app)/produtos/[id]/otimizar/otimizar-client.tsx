@@ -222,22 +222,49 @@ export function OtimizarClient({
     [state.atributos, requiredNames],
   );
 
+  // Requisitos REAIS da categoria + gate (do preview) que ancoram o score —
+  // sem isso o 100 seria fake. undefined enquanto o preview não carregou.
+  const scoreRequirements = useMemo(() => {
+    if (!preview) return undefined;
+    const conectadas = [preview.ml, preview.shopee].filter((p) => p.connected);
+    if (conectadas.length === 0) {
+      return { requiredAttrNames: [], publicavel: false, pendencias: [] };
+    }
+    const requiredAttrNames = [
+      ...new Set(
+        conectadas.flatMap((p) =>
+          p.requiredAttributes.filter((a) => a.required).map((a) => a.name),
+        ),
+      ),
+    ];
+    const publicavel = conectadas.every(
+      (p) => p.alreadyPublished || p.validation.ok,
+    );
+    const pendencias = conectadas.flatMap((p) =>
+      p.validation.ok ? [] : p.validation.problemas.map((x) => x.mensagem),
+    );
+    return { requiredAttrNames, publicavel, pendencias };
+  }, [preview]);
+
   // Score ao vivo enquanto edita.
   const { score, breakdown } = useMemo(
     () =>
-      calcularScore({
-        tituloMl: state.tituloMl,
-        tituloShopee: state.tituloShopee,
-        descricao: state.descricao,
-        imagens: state.imagens,
-        fotoUrl: state.fotoUrl,
-        atributos: state.atributos,
-        categoriaMlId: state.categoriaMlId,
-        categoriaShopeeId: state.categoriaShopeeId,
-        preco: state.preco,
-        quantidade: state.quantidade,
-      }),
-    [state],
+      calcularScore(
+        {
+          tituloMl: state.tituloMl,
+          tituloShopee: state.tituloShopee,
+          descricao: state.descricao,
+          imagens: state.imagens,
+          fotoUrl: state.fotoUrl,
+          atributos: state.atributos,
+          categoriaMlId: state.categoriaMlId,
+          categoriaShopeeId: state.categoriaShopeeId,
+          preco: state.preco,
+          quantidade: state.quantidade,
+        },
+        scoreRequirements,
+      ),
+    [state, scoreRequirements],
   );
 
   // Prontidão de publicação — o foco decisivo do painel (pronto vs. ajustes).

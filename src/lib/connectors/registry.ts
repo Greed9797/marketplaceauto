@@ -107,6 +107,16 @@ export const CONNECTOR_PROVIDER_DEFINITIONS: Partial<
     supportsOrders: true,
     supportsAdMetrics: false,
   },
+  [ConnectorProvider.LEVANE]: {
+    provider: ConnectorProvider.LEVANE,
+    name: "Levane",
+    category: "commerce",
+    connectionMode: "manual",
+    accountUnitLabel: "Loja",
+    supportsSelection: false,
+    supportsOrders: true,
+    supportsAdMetrics: false,
+  },
   [ConnectorProvider.GOOGLE_SHEETS]: {
     provider: ConnectorProvider.GOOGLE_SHEETS,
     name: "Google Sheets / WhatsApp",
@@ -197,6 +207,7 @@ export const manualCommerceProviders = [
   ConnectorProvider.MAGAZORD,
   ConnectorProvider.GOOGLE_SHEETS,
   ConnectorProvider.LOJA_INTEGRADA,
+  ConnectorProvider.LEVANE,
 ] as const;
 
 export function getConnectorDefinition(provider: ConnectorProvider) {
