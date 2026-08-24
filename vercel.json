@@ -1,15 +1,5 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "regions": ["gru1"],
-  "framework": "nextjs",
-  "crons": [
-    {
-      "path": "/api/cron/workspace-sync",
-      "schedule": "0 6 * * *"
-    },
-    {
-      "path": "/api/cron/token-keepalive",
-      "schedule": "0 3 * * *"
-    }
-  ]
+  "framework": "nextjs"
 }

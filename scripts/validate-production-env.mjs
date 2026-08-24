@@ -59,16 +59,6 @@ const requiredProductionEnvGroups = [
     keys: ["INNGEST_SIGNING_KEY"],
     message: "INNGEST_SIGNING_KEY is required in production.",
   },
-  {
-    keys: ["TOKEN_ENCRYPTION_KEY"],
-    message:
-      "TOKEN_ENCRYPTION_KEY (32-byte base64) is required in production for connector token encryption.",
-  },
-  {
-    keys: ["CRON_SECRET"],
-    message:
-      "CRON_SECRET is required in production to authorize Vercel cron invocations.",
-  },
   // Observability is optional: Sentry and PostHog only initialize when their
   // env vars are present (guarded in instrumentation/analytics), so a missing
   // value disables them with zero runtime overhead — never blocks the build.
@@ -117,17 +107,12 @@ export function productionEnvErrors(env = process.env) {
     errors.push("NEXTAUTH_URL must use https in production.");
   }
 
-  // Prod data lives in schema=w3ads today; schema=w3marketplace is the target
-  // of the (unfinished) fusion migration. Accept both, reject anything else —
-  // an URL without an explicit schema silently lands on `public`.
+  // W3 Marketplace has its own isolated schema. An URL without the explicit
+  // target could silently land on `public` or, worse, in the W3 Ads schema.
   for (const key of ["DATABASE_URL", "DIRECT_URL"]) {
-    if (
-      hasText(env[key]) &&
-      !env[key].includes("schema=w3ads") &&
-      !env[key].includes("schema=w3marketplace")
-    ) {
+    if (hasText(env[key]) && !env[key].includes("schema=w3marketplace")) {
       errors.push(
-        `${key} must include schema=w3ads (current) or schema=w3marketplace in production.`,
+        `${key} must include schema=w3marketplace in production.`,
       );
     }
   }

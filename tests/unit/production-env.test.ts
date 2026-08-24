@@ -58,8 +58,6 @@ describe("production env validation", () => {
       "UPSTASH_REDIS_REST_TOKEN is required in production.",
       "INNGEST_EVENT_KEY is required in production.",
       "INNGEST_SIGNING_KEY is required in production.",
-      "TOKEN_ENCRYPTION_KEY (32-byte base64) is required in production for connector token encryption.",
-      "CRON_SECRET is required in production to authorize Vercel cron invocations.",
     ]);
   });
 
@@ -93,8 +91,8 @@ describe("production env validation", () => {
     ).toEqual([
       "AUTH_TRUST_HOST must be true in production.",
       "NEXTAUTH_URL must use https in production.",
-      "DATABASE_URL must include schema=w3ads (current) or schema=w3marketplace in production.",
-      "DIRECT_URL must include schema=w3ads (current) or schema=w3marketplace in production.",
+      "DATABASE_URL must include schema=w3marketplace in production.",
+      "DIRECT_URL must include schema=w3marketplace in production.",
       "DATABASE_URL must use the Supabase transaction pooler (pgbouncer / port 6543) in serverless production.",
     ]);
   });

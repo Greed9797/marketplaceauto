@@ -8,7 +8,6 @@ import {
 import {
   canAddWorkspaceConnectors,
   canManagePlatformUsers,
-  canManageProviderConfigs,
   canViewBrands,
 } from "@/lib/auth/platform-permissions";
 
@@ -36,6 +35,12 @@ export function Sidebar({ context }: { context: AppContext }) {
       label: "Notificações",
       href: "/notificacoes",
       icon: "notificacoes",
+      section: "overview",
+    },
+    {
+      label: "Demandas",
+      href: "/demandas",
+      icon: "demandas",
       section: "overview",
     },
     ...(canViewBrands(context.user)
@@ -84,16 +89,16 @@ export function Sidebar({ context }: { context: AppContext }) {
             icon: "relatorios" as const,
             section: "manage" as const,
           },
-          {
-            label: "Conectores",
-            href: "/connectors",
-            icon: "connectors" as const,
-            section: "manage" as const,
-          },
         ]
       : []),
     ...(canManageMembers(context.currentMembership.role)
       ? [
+          {
+            label: "Config. demandas",
+            href: "/demandas/configuracoes",
+            icon: "settings" as const,
+            section: "manage" as const,
+          },
           {
             label: "Membros",
             href: "/workspace/members",
@@ -124,16 +129,6 @@ export function Sidebar({ context }: { context: AppContext }) {
           {
             label: "Conta e workspaces",
             href: "/workspace/settings",
-            icon: "settings" as const,
-            section: "account" as const,
-          },
-        ]
-      : []),
-    ...(canManageProviderConfigs(context.user)
-      ? [
-          {
-            label: "Config. conectores",
-            href: "/connectors/settings",
             icon: "settings" as const,
             section: "account" as const,
           },

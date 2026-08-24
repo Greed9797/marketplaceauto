@@ -3,10 +3,10 @@ import { syncGoogleAnalyticsBackfill } from "./sync-google-analytics";
 import { syncEcommerceBackfill } from "./sync-ecommerce";
 import { syncMetaBackfill } from "./sync-meta";
 import { syncShopifyBackfill } from "./sync-shopify";
-import { syncActiveConnectorsDaily } from "./sync-daily";
+import { checkDemandSla } from "./check-demand-sla";
 
 export const inngestFunctions = [
-  syncActiveConnectorsDaily,
+  checkDemandSla,
   syncMetaBackfill,
   syncGoogleAdsBackfill,
   syncGoogleAnalyticsBackfill,

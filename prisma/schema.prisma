@@ -28,6 +28,10 @@ model User {
   sentInvites         WorkspaceInvite[]    @relation("WorkspaceInviteInviter")
   betaFeedbacks       BetaFeedback[]
   accountReviewSessions AccountReviewSession[]
+  assignedDemandTasks DemandTask[]          @relation("DemandTaskAssignee")
+  createdDemandTasks  DemandTask[]          @relation("DemandTaskCreator")
+  demandProfiles      DemandMemberProfile[] @relation("DemandMemberUser")
+  ledDemandProfiles   DemandMemberProfile[] @relation("DemandMemberLeader")
 }
 
 enum PlatformRole {
@@ -105,6 +109,10 @@ model Workspace {
   aiConfig                 WorkspaceAiConfig?
   notifications            Notification[]
   notificationChannel      NotificationChannel?
+  demandCategories         DemandCategory[]
+  demandTasks              DemandTask[]
+  demandMemberProfiles     DemandMemberProfile[]
+  demandNotificationConfig DemandNotificationConfig?
 }
 
 /// Canal externo de notificação por workspace (feature roas-anomaly-insights).
@@ -761,4 +769,128 @@ model Publicacao {
 
   @@index([produtoId])
   @@index([clienteId])
+}
+
+enum DemandTaskStatus {
+  TODO
+  RUNNING
+  PAUSED
+  DONE
+}
+
+enum DemandAlertThreshold {
+  OVER_BY_50
+  OVER_BY_100
+}
+
+enum DemandAlertRecipient {
+  ASSIGNEE
+  LEADER
+  GROUP
+}
+
+enum DemandAlertStatus {
+  PENDING
+  SENDING
+  SENT
+  FAILED
+}
+
+/// Categoria operacional com uma meta de execução em minutos.
+model DemandCategory {
+  id            String       @id @default(cuid())
+  workspaceId   String
+  workspace     Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  name          String
+  targetMinutes Int
+  color         String       @default("#D90429")
+  active        Boolean      @default(true)
+  position      Int          @default(0)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+  tasks         DemandTask[]
+
+  @@unique([workspaceId, name])
+  @@index([workspaceId, active, position])
+}
+
+/// Demanda do Kanban. `accumulatedSeconds` guarda os segmentos já fechados;
+/// quando RUNNING, o segmento atual começa em `runningSince`.
+model DemandTask {
+  id                 String           @id @default(cuid())
+  workspaceId        String
+  workspace          Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  categoryId         String
+  category           DemandCategory   @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  assigneeId         String
+  assignee           User             @relation("DemandTaskAssignee", fields: [assigneeId], references: [id], onDelete: Cascade)
+  createdById        String
+  createdBy          User             @relation("DemandTaskCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  title              String
+  description        String?
+  status             DemandTaskStatus @default(TODO)
+  accumulatedSeconds Int              @default(0)
+  runningSince       DateTime?
+  pausedAt           DateTime?
+  completedAt        DateTime?
+  position           Int              @default(0)
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+  alerts             DemandAlert[]
+
+  @@index([workspaceId, status, position])
+  @@index([workspaceId, assigneeId, status])
+  @@index([categoryId])
+}
+
+/// Mapeia cada membro do workspace para sua conversa pessoal no MCRM e líder.
+model DemandMemberProfile {
+  id                 String    @id @default(cuid())
+  workspaceId        String
+  workspace          Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  userId             String
+  user               User      @relation("DemandMemberUser", fields: [userId], references: [id], onDelete: Cascade)
+  leaderUserId       String?
+  leader             User?     @relation("DemandMemberLeader", fields: [leaderUserId], references: [id], onDelete: SetNull)
+  mcrmConversationId String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  @@unique([workspaceId, userId])
+  @@index([workspaceId, leaderUserId])
+}
+
+/// Configuração do MCRM por workspace. O bearer nunca fica nesta tabela:
+/// `mcrmTokenSecretId` aponta para o Supabase Vault.
+model DemandNotificationConfig {
+  id                         String    @id @default(cuid())
+  workspaceId                String    @unique
+  workspace                  Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  enabled                    Boolean   @default(false)
+  mcrmBaseUrl                String?
+  mcrmTokenSecretId          String?
+  generalGroupConversationId String?
+  createdAt                  DateTime  @default(now())
+  updatedAt                  DateTime  @updatedAt
+}
+
+/// Outbox durável por tarefa, limiar e destinatário. A chave também alimenta
+/// a idempotência do MCRM, tornando retries seguros contra duplicação.
+model DemandAlert {
+  id             String                @id @default(cuid())
+  taskId         String
+  task           DemandTask            @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  threshold      DemandAlertThreshold
+  recipient      DemandAlertRecipient
+  status         DemandAlertStatus     @default(PENDING)
+  attempts       Int                   @default(0)
+  nextAttemptAt  DateTime?
+  sentAt         DateTime?
+  lastError      String?
+  conversationId String?
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+
+  @@unique([taskId, threshold, recipient])
+  @@index([status, nextAttemptAt, createdAt])
 }

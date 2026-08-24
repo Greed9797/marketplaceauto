@@ -2,6 +2,7 @@
 
 import {
   BellRing,
+  Columns3,
   FileBarChart,
   Gauge,
   HelpCircle,
@@ -33,6 +34,7 @@ export type SidebarIconKey =
   | "dashboard"
   | "painel_geral"
   | "notificacoes"
+  | "demandas"
   | "brands"
   | "clientes"
   | "produtos"
@@ -71,6 +73,7 @@ const iconMap: Record<SidebarIconKey, LucideIcon> = {
   dashboard: LayoutDashboard,
   painel_geral: Gauge,
   notificacoes: BellRing,
+  demandas: Columns3,
   brands: PanelsTopLeft,
   clientes: Store,
   produtos: Package,
