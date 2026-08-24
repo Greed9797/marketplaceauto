@@ -10,6 +10,7 @@ export type AuditAction =
   | "auth.password_reset.complete"
   | "connector.google_ads.connect"
   | "connector.google_ads.selection_created"
+  | "connector.google_drive.connected"
   | "connector.google_analytics.selection_created"
   | "connector.selection.connect"
   | "connector.meta.connect"

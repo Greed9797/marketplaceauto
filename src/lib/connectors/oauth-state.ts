@@ -7,7 +7,8 @@ export type ConnectorOAuthProvider =
   | "SHOPIFY"
   | "NUVEMSHOP"
   | "MERCADO_LIVRE"
-  | "SHOPEE";
+  | "SHOPEE"
+  | "GOOGLE_DRIVE";
 
 export type ConnectorOAuthStatePayload = {
   provider: ConnectorOAuthProvider;

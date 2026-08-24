@@ -11,6 +11,10 @@ import {
 import { MercadoLivreClient } from "@/lib/connectors/mercado-livre/client";
 import { getGlobalMercadoLivreConfig } from "@/lib/connectors/mercado-livre/global-config";
 import {
+  getGoogleDriveConfigForRequest,
+  refreshGoogleDriveAccessToken,
+} from "@/lib/connectors/google-drive/oauth";
+import {
   buildMercadoLivreConfigFromProviderConfig,
   buildShopeeConfigFromProviderConfig,
   getActiveProviderConfig,
@@ -46,6 +50,7 @@ export type KeepAliveResult =
 const SUPPORTED = new Set<ConnectorProvider>([
   ConnectorProvider.MERCADO_LIVRE,
   ConnectorProvider.SHOPEE,
+  ConnectorProvider.GOOGLE_DRIVE,
 ]);
 
 async function markTokenExpired(connectorId: string, message: string) {
@@ -126,6 +131,24 @@ export async function keepAliveRefreshConnector(
         connector,
         accessToken: refreshed.accessToken,
         refreshToken: refreshed.refreshToken ?? refreshToken,
+        expiresIn: refreshed.expiresIn,
+      });
+      return "refreshed";
+    }
+
+    if (connector.provider === ConnectorProvider.GOOGLE_DRIVE) {
+      const config = await getGoogleDriveConfigForRequest();
+      if (!config) return "skipped";
+
+      const refreshed = await refreshGoogleDriveAccessToken({
+        config,
+        refreshToken,
+      });
+      await persistRefreshed({
+        connector,
+        accessToken: refreshed.accessToken,
+        // Google não rotaciona o refresh token num grant de refresh.
+        refreshToken: refreshToken,
         expiresIn: refreshed.expiresIn,
       });
       return "refreshed";

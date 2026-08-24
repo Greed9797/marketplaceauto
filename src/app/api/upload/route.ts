@@ -1,14 +1,18 @@
 import { NextResponse, type NextRequest } from "next/server";
 
+import {
+  getActiveDriveAccount,
+  uploadImageToWorkspaceDrive,
+} from "@/lib/connectors/google-drive/storage";
 import { isNextControlFlowError } from "@/lib/connectors/oauth-route-error";
+import { prisma } from "@/lib/db/prisma";
 import { requirePublisherWorkspace } from "@/lib/publisher/route-guard";
 
 export const runtime = "nodejs";
 
-// Product photos are stored in the public Supabase Storage bucket `produtos`.
-// The bucket must exist (public) in the Supabase project before uploads work —
-// create it once in Dashboard > Storage (or via the CLI). Objects are keyed by
-// workspace (and cliente when provided) so a single project stays organized.
+// Fallback storage while the workspace has no Google Drive connected. Once the
+// Drive connector is active (see google-drive/storage.ts), uploads land in the
+// user's own Drive and are served through the authenticated /api/files proxy.
 const STORAGE_BUCKET = "produtos";
 
 /** Only accept common web image types for product photos. */
@@ -28,16 +32,6 @@ export async function POST(request: NextRequest) {
   try {
     const guard = await requirePublisherWorkspace();
     if (!guard.ok) return guard.response;
-
-    const supabaseUrl = process.env.SUPABASE_URL;
-    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-    if (!supabaseUrl || !serviceRoleKey) {
-      console.error("[api/upload] missing Supabase Storage configuration");
-      return NextResponse.json(
-        { success: false, error: "Armazenamento de imagens não configurado." },
-        { status: 500 },
-      );
-    }
 
     const formData = await request.formData();
     const file = formData.get("file");
@@ -66,6 +60,53 @@ export async function POST(request: NextRequest) {
 
     const buffer = Buffer.from(await file.arrayBuffer());
     const safeName = slugifySegment(file.name) || "foto";
+
+    // Destino primário: Google Drive do workspace (conectado via /connectors).
+    // O Supabase Storage segue como fallback enquanto o Drive não estiver
+    // conectado — nenhuma operação de upload fica indisponível na transição.
+    const driveAccount = await getActiveDriveAccount(guard.workspaceId);
+    if (driveAccount) {
+      let clienteName: string | null = null;
+      if (typeof clienteIdRaw === "string" && clienteIdRaw.trim()) {
+        const cliente = await prisma.cliente.findFirst({
+          where: { id: clienteIdRaw.trim(), workspaceId: guard.workspaceId },
+          select: { nome: true },
+        });
+        clienteName = cliente?.nome ?? null;
+      }
+
+      try {
+        const uploaded = await uploadImageToWorkspaceDrive({
+          workspaceId: guard.workspaceId,
+          clienteName,
+          fileName: safeName,
+          mimeType: file.type,
+          bytes: buffer.buffer.slice(
+            buffer.byteOffset,
+            buffer.byteOffset + buffer.byteLength,
+          ),
+        });
+        return NextResponse.json({ success: true, url: uploaded.url });
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : "unknown";
+        console.error(`[api/upload] google drive failed: ${message}`);
+        return NextResponse.json(
+          { success: false, error: "Falha ao enviar imagem para o Google Drive" },
+          { status: 502 },
+        );
+      }
+    }
+
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!supabaseUrl || !serviceRoleKey) {
+      console.error("[api/upload] no storage backend available (drive not connected, supabase not configured)");
+      return NextResponse.json(
+        { success: false, error: "Armazenamento de imagens não configurado." },
+        { status: 500 },
+      );
+    }
+
     const clienteSegment =
       typeof clienteIdRaw === "string" && clienteIdRaw.trim()
         ? `${slugifySegment(clienteIdRaw.trim())}/`
