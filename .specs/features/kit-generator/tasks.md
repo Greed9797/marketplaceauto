@@ -238,17 +238,21 @@ T10 → T11
 
 ### T8: UI de revisão de kits
 
-**What**: Criar página `/kits` com lista de propostas (motivo, componentes, preço sugerido), ações aprovar/rejeitar com preço editável, filtros por status/cliente, fila "revisão manual" da classificação e botão de acionar classificação. Client component coeso na mesma feature folder.
-**Where**: `src/app/(app)/kits/page.tsx`
+**Status**: Complete
+
+**What**: Criar página `/kits` com lista de propostas (motivo, componentes, preço sugerido), ações aprovar/rejeitar com preço editável, filtros por status/cliente, fila "revisão manual" da classificação, edição inline persistida com `source=manual` e botão de acionar classificação. Client component coeso na mesma feature folder.
+**Where**: `src/app/(app)/kits/page.tsx`, `src/app/(app)/kits/kits-client.tsx`, `src/app/api/kits/classifications/route.ts`, `src/middleware.ts`
 **Depends on**: T4, T7
 **Reuses**: padrões visuais/tokens das páginas existentes
-**Requirement**: KIT-16, KIT-02 (fila de revisão visível)
+**Requirement**: KIT-16, KIT-02 (fila de revisão visível), KIT-04 (override manual gravável e permanente)
 
 **Done when**:
 
-- [ ] Component test: render de estados proposta/aprovado/bloqueado/vazio
-- [ ] Fluxo aprovar→kit aparece como aprovado na lista (integração mockada)
-- [ ] Gate check passes: Full
+- [x] Component test: render de estados proposta/aprovado/bloqueado/vazio
+- [x] Fluxo aprovar→kit aparece como aprovado na lista (integração mockada)
+- [x] Edição inline persiste `source=manual`; reprocessamento preserva o override
+- [x] `/kits` exige sessão no middleware
+- [x] Gate check passes: Full
 
 **Tests**: unit
 **Gate**: full

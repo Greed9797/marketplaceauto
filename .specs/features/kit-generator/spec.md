@@ -134,9 +134,9 @@ um e verificar relatório parcial.
 | Requirement ID | Story | Phase | Status |
 | -------------- | ----- | ----- | ------ |
 | KIT-01 | P1: Derivação IA de atributos | T1-T3 | Complete |
-| KIT-02 | P1: Limiar de confiança 0.7 | T3 | Complete |
+| KIT-02 | P1: Limiar de confiança 0.7 | T3, T8 | Complete |
 | KIT-03 | P1: Falha de IA não bloqueia lote | T3-T4 | Complete |
-| KIT-04 | P1: Override manual permanente | T1, T3 | Complete |
+| KIT-04 | P1: Override manual permanente | T1, T3, T8 | Complete |
 | KIT-05 | P1: Lote ≤50 com retomada | T3-T4 | Complete |
 | KIT-06 | P1: Camada 1 gênero+idade | T5 | Complete |
 | KIT-07 | P1: Homogêneos e matriz de pares | T5 | Complete |
@@ -148,7 +148,7 @@ um e verificar relatório parcial.
 | KIT-13 | P1: Aprovação persiste kit | T7 | Complete |
 | KIT-14 | P1: Rejeição impede reproposta | T1, T6-T7 | Complete |
 | KIT-15 | P1: Bloqueio por estoque | T7 | Complete |
-| KIT-16 | P1: Lista com status/filtros | T7-T8 | In Progress |
+| KIT-16 | P1: Lista com status/filtros | T7-T8 | Complete |
 | KPUB-01 | P2: Publicação em lote Shopee | - | Pending |
 | KPUB-02 | P2: Falha isolada por kit | - | Pending |
 | KPUB-03 | P2: Checagem de estoque no publish | - | Pending |

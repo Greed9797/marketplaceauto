@@ -12,6 +12,7 @@ const protectedRoutes = [
   "/platform",
   "/feedback",
   "/notificacoes",
+  "/kits",
 ];
 
 const rateLimitedRoutes = [
