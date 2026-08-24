@@ -144,9 +144,9 @@ um e verificar relatório parcial.
 | KIT-09 | P1: Faixa de preço 1:5 | T5 | Complete |
 | KIT-10 | P1: Motivo na proposta | T5 | Complete |
 | KIT-11 | P1: Preferência cor distinta | T5 | Complete |
-| KIT-12 | P1: Priorização giro alto+lento | T5 | In Progress |
+| KIT-12 | P1: Priorização giro alto+lento | T5-T6 | Complete |
 | KIT-13 | P1: Aprovação persiste kit | - | Pending |
-| KIT-14 | P1: Rejeição impede reproposta | T1 | In Progress |
+| KIT-14 | P1: Rejeição impede reproposta | T1, T6 | Complete |
 | KIT-15 | P1: Bloqueio por estoque | - | Pending |
 | KIT-16 | P1: Lista com status/filtros | - | Pending |
 | KPUB-01 | P2: Publicação em lote Shopee | - | Pending |

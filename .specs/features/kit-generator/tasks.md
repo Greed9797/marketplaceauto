@@ -195,6 +195,8 @@ T10 → T11
 
 ### T6: Persistência de propostas
 
+**Status**: Complete
+
 **What**: Implementar `generateProposals(clienteId)`: carrega classificados+estoque+pares ativos, roda engine, persiste propostas com comboHash canônico; rejeitadas não voltam.
 **Where**: `src/lib/kits/proposals.ts`
 **Depends on**: T5
@@ -203,9 +205,9 @@ T10 → T11
 
 **Done when**:
 
-- [ ] Hash canônico independente de ordem dos componentes (teste)
-- [ ] Proposta rejeitada não reaparece (teste)
-- [ ] Gate check passes: `npx vitest run`
+- [x] Hash canônico independente de ordem dos componentes (teste)
+- [x] Proposta rejeitada não reaparece (teste)
+- [x] Gate check passes: `npx vitest run`
 
 **Tests**: unit
 **Gate**: quick
