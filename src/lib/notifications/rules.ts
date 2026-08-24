@@ -1,6 +1,7 @@
 import { ConnectorProvider, ConnectorStatus, type Prisma } from "@prisma/client";
 
 import { prisma } from "@/lib/db/prisma";
+import { dispatchNotifications } from "@/lib/notifications/channels";
 import {
   RUNWAY_WINDOW_DAYS,
   averageUnitsPerDay,
@@ -66,11 +67,11 @@ async function isOnCooldown(
 async function persistDrafts(
   workspaceId: string,
   drafts: NotificationDraft[],
-): Promise<number> {
+): Promise<NotificationDraft[]> {
   // Advisory lock por workspace: dois syncs concorrentes (cron + manual)
   // passariam no check-then-insert ao mesmo tempo e duplicariam o alerta.
   const since = daysAgo(1);
-  let created = 0;
+  const persisted: NotificationDraft[] = [];
 
   await prisma.$transaction(async (tx) => {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`notifications:${workspaceId}`}))`;
@@ -90,11 +91,11 @@ async function persistDrafts(
           metadata: draft.metadata ?? undefined,
         },
       });
-      created += 1;
+      persisted.push(draft);
     }
   });
 
-  return created;
+  return persisted;
 }
 
 type RoasWindow = { spend: number; revenue: number };
@@ -448,10 +449,24 @@ export async function evaluateWorkspaceNotificationRules(
       }),
     ]);
 
-  return persistDrafts(workspaceId, [
+  const created = await persistDrafts(workspaceId, [
     ...roasDrafts,
     ...stockDrafts,
     ...accountDrafts,
     ...shopeeAccountDrafts,
   ]);
+
+  if (created.length > 0) {
+    // Fire-and-forget FORA do lock/tx: entrega externa nunca derruba o sync
+    // nem estende a transação (CHAN-01/02).
+    void dispatchNotifications(workspaceId, created).catch(
+      (error: unknown) => {
+        console.error(
+          `[notifications] channel dispatch failed: ${error instanceof Error ? error.message : "unknown"}`,
+        );
+      },
+    );
+  }
+
+  return created.length;
 }

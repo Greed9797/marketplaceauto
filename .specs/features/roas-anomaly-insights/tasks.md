@@ -267,10 +267,10 @@ T10
 
 **Done when**:
 
-- [ ] Webhook mock recebe payload <60s (sem throttle artificial no teste)
-- [ ] 3 retries com backoff e log final (testado com fetch mockado)
-- [ ] Cooldown: notificações antigas não reentregam
-- [ ] Gate check passes: `npx vitest run`
+- [x] Webhook mock recebe payload <60s (sem throttle artificial no teste)
+- [x] 3 retries com backoff e log final (testado com fetch mockado)
+- [x] Cooldown: notificações antigas não reentregam
+- [x] Gate check passes: `npx vitest run`
 
 **Tests**: unit
 **Gate**: quick

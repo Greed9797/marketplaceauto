@@ -1,8 +1,8 @@
 import { ConnectorProvider, ConnectorStatus } from "@prisma/client";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { prismaMocks, txMocks, detectShopeeAccountRoasDropMock } = vi.hoisted(
-  () => ({
+const { prismaMocks, txMocks, detectShopeeAccountRoasDropMock, dispatchNotificationsMock } =
+  vi.hoisted(() => ({
     prismaMocks: {
       $transaction: vi.fn(),
       notification: {
@@ -23,12 +23,15 @@ const { prismaMocks, txMocks, detectShopeeAccountRoasDropMock } = vi.hoisted(
       },
     },
     detectShopeeAccountRoasDropMock: vi.fn(),
-  }),
-);
+    dispatchNotificationsMock: vi.fn(),
+  }));
 
 vi.mock("@/lib/db/prisma", () => ({ prisma: prismaMocks }));
 vi.mock("@/lib/notifications/shopee-account-rule", () => ({
   detectShopeeAccountRoasDrop: detectShopeeAccountRoasDropMock,
+}));
+vi.mock("@/lib/notifications/channels", () => ({
+  dispatchNotifications: dispatchNotificationsMock,
 }));
 
 import {
@@ -59,6 +62,7 @@ beforeEach(() => {
   txMocks.notification.findFirst.mockResolvedValue(null);
   txMocks.notification.create.mockResolvedValue({});
   detectShopeeAccountRoasDropMock.mockResolvedValue([]);
+  dispatchNotificationsMock.mockResolvedValue({ delivered: 0 });
   prismaMocks.ecommerceOrderItem.groupBy.mockResolvedValue([]);
 });
 
@@ -344,6 +348,13 @@ describe("evaluateWorkspaceNotificationRules", () => {
     });
     const second = await evaluateWorkspaceNotificationRules("ws-1");
     expect(second).toBe(0);
+
+    // CHAN-03: só a criação nova vai para o canal externo.
+    expect(dispatchNotificationsMock).toHaveBeenCalledTimes(1);
+    expect(dispatchNotificationsMock).toHaveBeenCalledWith(
+      "ws-1",
+      [expect.objectContaining({ type: "roas_drop", entityId: "acc-shopee-1" })],
+    );
   });
 
   it("nao derruba as demais regras quando a regra de conta falha", async () => {
