@@ -103,6 +103,27 @@ model Workspace {
   accountReviewSessions    AccountReviewSession[]
   clientes                 Cliente[]
   aiConfig                 WorkspaceAiConfig?
+  notifications            Notification[]
+}
+
+model Notification {
+  id          String    @id @default(cuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  // roas_drop | low_stock | account_quality | sync_error
+  type        String
+  // info | warning | critical
+  severity    String    @default("info")
+  title       String
+  body        String?
+  entityType  String?
+  entityId    String?
+  metadata    Json?
+  readAt      DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([workspaceId, createdAt(sort: Desc)])
+  @@index([workspaceId, readAt])
 }
 
 model WorkspaceSyncState {
@@ -271,6 +292,7 @@ enum ConnectorProvider {
   SHOPEE
   SHOPEE_ADS
   MERCADO_LIVRE_ADS
+  GOOGLE_DRIVE
 }
 
 enum ConnectorStatus {
