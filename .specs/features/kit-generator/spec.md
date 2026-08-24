@@ -30,7 +30,7 @@ com trava de estoque e coerência de preço.
 
 | Assumption / decision | Chosen default | Rationale | Confirmed? |
 | --------------------- | -------------- | --------- | ---------- |
-| Origem dos atributos | IA extrai de título + categoria do marketplace (`atributos` Json do Produto), com edição manual inline | 700+ itens inviabilizam cadastro manual; infra Gemini BYOK já existe | y (AD-002) |
+| Origem dos atributos | IA extrai atributos semânticos de título + categoria do marketplace (`atributos` Json do Produto), com edição manual inline; preço vem de `Produto.preco` | 700+ itens inviabilizam cadastro manual; preço persistido é mais confiável que inferência por IA | y (AD-002 + decisão do usuário em 2026-08-24) |
 | Camada 1 rígida | Mesmo `gender` E mesma `ageBand` são pré-requisito de qualquer cruzamento | Regra inegociável do briefing | y |
 | Camada 2 categorias | Kits homogêneos (2+ da mesma `categoryKey`) sempre permitidos; complementares somente por matriz de pares aprovados semeada manualmente e editável | Impede combinações sem sentido sem bloquear escala | y (delegado) |
 | Trava de estoque | Toda SKU componente precisa de estoque ≥2 unidades (configurável) | Evita kit invalidado por grade quebrada | y (delegado) |
@@ -54,7 +54,7 @@ kits opere sobre dados confiáveis sem trabalho manual.
 
 **Acceptance Criteria**:
 
-1. WHEN um produto publicado não tiver atributos normalizados THEN system SHALL derivar `gender`, `ageBand`, `categoryKey`, `colorPattern` e faixa de preço via IA a partir de título, descrição e categoria do marketplace.
+1. WHEN um produto publicado não tiver atributos normalizados THEN system SHALL derivar `gender`, `ageBand`, `categoryKey` e `colorPattern` via IA a partir de título, descrição e categoria do marketplace; o motor SHALL usar `Produto.preco` como fonte de preço, sem inferi-lo por IA.
 2. WHEN a IA retornar confiança menor que 0.7 para qualquer atributo THEN system SHALL marcar o produto para revisão manual em vez de usá-lo nos cruzamentos.
 3. IF a chamada de IA falhar ou o workspace não tiver chave configurada THEN system SHALL enfileirar o produto para retry na próxima execução e seguir o lote sem interromper.
 4. WHEN o usuário editar um atributo manualmente THEN system SHALL gravar origem `manual` e nunca sobrescrevê-lo em reprocessamentos.
@@ -93,7 +93,7 @@ ver meus kits aprovados so that nada publique sem decisão humana.
 
 **Acceptance Criteria**:
 
-1. WHEN o usuário aprovar uma proposta THEN system SHALL persistir o kit com status `aprovado`, componentes referenciados e preço definido pelo usuário.
+1. WHEN o usuário aprovar uma proposta THEN system SHALL persistir o kit com status `aprovado`, componentes referenciados, preço definido pelo usuário e um `Produto` derivado 1:1 em rascunho, com título, descrição e galeria sugeridos a partir dos componentes para revisão antes da publicação.
 2. WHEN o usuário rejeitar uma proposta THEN system SHALL registrar a rejeição e não repropor a mesma combinação de componentes.
 3. IF uma SKU de kit aprovado tiver estoque abaixo do mínimo THEN system SHALL marcar o kit como `bloqueado` até reposição.
 4. The system SHALL exibir a lista de kits com status (`proposta`, `aprovado`, `rejeitado`, `bloqueado`) filtrável por cliente/workspace.
@@ -110,7 +110,7 @@ so that eu capture o ganho de ticket sem operação manual.
 
 **Acceptance Criteria**:
 
-1. WHEN o usuário selecionar kits `aprovados` e acionar publicação THEN system SHALL criar os anúncios via fluxo Shopee existente com imagens dos componentes e preço do kit.
+1. WHEN o usuário selecionar kits `aprovados` e acionar publicação THEN system SHALL publicar o `Produto` derivado pelo fluxo Shopee existente, com imagens dos componentes e preço do kit; categoria só SHALL ser sugerida automaticamente quando todos os componentes tiverem a mesma `categoriaShopeeId` não nula, caso contrário a publicação SHALL exigir confirmação manual no editor.
 2. WHEN a publicação de um kit falhar THEN system SHALL reportar o erro por kit sem interromper o lote.
 3. IF o estoque de algum componente caísse abaixo do mínimo no momento da publicação THEN system SHALL pular o kit e marcá-lo `bloqueado`.
 
@@ -145,15 +145,15 @@ um e verificar relatório parcial.
 | KIT-10 | P1: Motivo na proposta | T5 | Complete |
 | KIT-11 | P1: Preferência cor distinta | T5 | Complete |
 | KIT-12 | P1: Priorização giro alto+lento | T5-T6 | Complete |
-| KIT-13 | P1: Aprovação persiste kit | T7 | Complete |
+| KIT-13 | P1: Aprovação persiste kit + Produto derivado revisável | T7, T9 | In Progress |
 | KIT-14 | P1: Rejeição impede reproposta | T1, T6-T7 | Complete |
 | KIT-15 | P1: Bloqueio por estoque | T7 | Complete |
 | KIT-16 | P1: Lista com status/filtros | T7-T8 | Complete |
-| KPUB-01 | P2: Publicação em lote Shopee | - | Pending |
-| KPUB-02 | P2: Falha isolada por kit | - | Pending |
-| KPUB-03 | P2: Checagem de estoque no publish | - | Pending |
+| KPUB-01 | P2: Publicação em lote Shopee | T9-T12 | Pending |
+| KPUB-02 | P2: Falha isolada por kit | T10-T12 | Pending |
+| KPUB-03 | P2: Checagem de estoque no publish | T10-T11 | Pending |
 
-**Coverage:** 19 total, 0 mapped to tasks yet, 19 unmapped (Tasks phase).
+**Coverage:** 19 total, 19 mapped to tasks, 0 unmapped.
 
 ---
 

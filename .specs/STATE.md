@@ -21,6 +21,15 @@ Confirmado por delegação ("você decide").
 O MVP gera propostas de kit; publicação automática sem gate humano fica fora
 do escopo. Confirmado por delegação.
 
+### AD-004 — Kit publica por Produto derivado revisável (2026-08-24)
+Cada Kit aprovado referencia um `Produto` derivado 1:1, persistido em rascunho,
+para reutilizar o editor, a auditoria e a idempotência do publisher existente.
+Título, descrição, imagens e preço são sugeridos a partir do kit; o preço de
+compatibilidade sempre vem de `Produto.preco`, nunca da IA. A categoria Shopee
+só é copiada automaticamente quando todos os componentes compartilham a mesma
+categoria não nula; nos demais casos o gestor deve confirmá-la no editor antes
+de publicar. Confirmado pelo usuário ("Produto derivado e revisável").
+
 ## Handoff snapshot (2026-08-24)
 
 - Branch: `feat/drive-dashboard-notificacoes` @ `b306a3f` (deployado em produção).

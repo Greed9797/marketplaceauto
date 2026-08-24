@@ -9,9 +9,10 @@
 
 Três camadas independentes: (1) classificação de catálogo via IA com revisão
 manual, (2) engine pura de compatibilidade que gera propostas explicáveis,
-(3) ciclo de vida de kit (proposta → aprovado → bloqueado → publicado) com
-gate humano. Tabelas novas; `Produto` não é migrado — a classificação mora em
-tabela própria 1:1 para permitir queries e retomada determinística.
+(3) ciclo de vida de kit (proposta → aprovado → produto derivado revisável →
+bloqueado/publicado) com gate humano. A classificação mora em tabela própria
+1:1 para permitir queries e retomada determinística; cada kit aprovado também
+referencia um `Produto` derivado 1:1 para reutilizar o editor e o publisher.
 
 ```mermaid
 graph TD
@@ -20,8 +21,11 @@ graph TD
     C[GET /api/kits/proposals] --> E[engine.ts puro: camadas 1-3]
     E --> P[(KitProposal)]
     D[PATCH /api/kits/proposals] --> K[(Kit aprovado/bloqueado)]
+    K --> DP[(Produto derivado em rascunho)]
+    DP --> ED[/produtos/:id/editar]
     K --> F[/kits UI: revisar e publicar/]
     F --> PUB[publish.ts -> shopee-publish P2]
+    PUB --> DP
 ```
 
 ## Code Reuse Analysis
@@ -40,7 +44,7 @@ graph TD
 
 | System | Integration Method |
 | ------ | ------------------ |
-| Database | Novas tabelas `ProductClassification`, `ComplementaryPair`, `KitProposal`, `Kit` |
+| Database | Novas tabelas `ProductClassification`, `ComplementaryPair`, `KitProposal`, `Kit`; relação opcional 1:1 `Kit.produtoId` → `Produto` |
 | IA | Cliente Gemini compartilhado; fallback chave global `GEMINI_API_KEY` |
 
 ---
@@ -89,6 +93,14 @@ graph TD
 - **Dependencies**: rotas `/api/kits/*`.
 - **Reuses**: padrões visuais das páginas existentes.
 
+### derived product service
+
+- **Purpose**: materializar, no momento da aprovação, um anúncio-rascunho editável e idempotente para o kit.
+- **Location**: `src/lib/kits/derived-product.ts`
+- **Interfaces**: `ensureDerivedProduto({ kitId, workspaceId }): Promise<Produto>`
+- **Rules**: título/descrição/galeria partem dos componentes; `preco` vem do kit; quantidade é o menor estoque disponível; categoria Shopee só é copiada quando todos os componentes concordam em uma mesma categoria não nula.
+- **Reuses**: `Produto`, editor `/produtos/[id]/editar` e publisher Shopee existentes.
+
 ---
 
 ## Data Models
@@ -135,13 +147,14 @@ interface Kit {
   id: string
   proposalId: string // unique FK KitProposal
   clienteId: string
+  produtoId?: string | null // unique FK Produto derivado, preenchido após aprovação
   price: number // definido pelo usuário na aprovação
   status: "aprovado" | "bloqueado" | "publicado" | "erro"
   shopeeItemId?: string | null
 }
 ```
 
-**Relationships**: Classification 1:1 Produto; Proposal N:1 Cliente; Kit 1:1 Proposal.
+**Relationships**: Classification 1:1 Produto; Proposal N:1 Cliente; Kit 1:1 Proposal; Kit 1:1 Produto derivado. A relação `Kit.produtoId` é opcional durante a migração, mas obrigatória para publicar.
 
 ---
 
@@ -153,6 +166,7 @@ interface Kit {
 | Confiança <0.7 | Marca `needsReview`; sai dos cruzamentos | Item aparece em fila de revisão manual |
 | Estoque cai abaixo do mínimo pós-aprovação | Revalidação marca kit `bloqueado` | Kit some das opções de publicação |
 | Falha de publicação individual | Status `erro` + mensagem por kit; lote segue | Relatório parcial na UI |
+| Produto derivado sem categoria Shopee | Serviço de publicação recusa o item sem chamar a API | UI oferece link para o editor completar e confirmar a categoria |
 
 ---
 
@@ -175,3 +189,6 @@ interface Kit {
 | Motor de compatibilidade | Função pura sem IO | Teste exaustivo barato das camadas 1–3 |
 | Anti-reproposta | Hash canônico dos componentIds em `comboHash` unique | Rejeição é definitiva sem consulta complexa |
 | Gatilho de classificação | Rota admin batch (≤50) acionada da UI | Sem infra nova de cron no MVP |
+| Contrato de publicação | `Kit` referencia um `Produto` derivado, persistido e revisável | Reutiliza validações, auditoria e idempotência do publisher; permite correção e retry sem duplicar anúncio |
+| Categoria do kit | Preencher automaticamente apenas se todos os componentes compartilharem a mesma categoria Shopee não nula | Evita escolher silenciosamente uma categoria incorreta em kits complementares |
+| Fonte de preço para compatibilidade | `Produto.preco`, nunca valor inferido pela IA | Usa dado comercial persistido e auditável |
