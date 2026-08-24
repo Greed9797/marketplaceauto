@@ -71,6 +71,12 @@ export function classifyRateLimitTarget(input: {
     return { keyPrefix: "upload", limit: 30, window: "1 m" };
   }
 
+  if (input.pathname.startsWith("/api/files")) {
+    // Proxy de imagens do Drive: cada hit custa chamadas à API do Google.
+    // Cache privado no browser absorve o tráfego legítimo de repetição.
+    return { keyPrefix: "upload", limit: 120, window: "1 m" };
+  }
+
   if (
     [
       "/api/clientes",

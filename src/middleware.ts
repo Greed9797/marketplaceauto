@@ -29,6 +29,7 @@ const rateLimitedRoutes = [
   "/api/shopee",
   "/api/ml",
   "/api/upload",
+  "/api/files",
   "/api/ai",
   "/api/workspace",
   "/api/observability",

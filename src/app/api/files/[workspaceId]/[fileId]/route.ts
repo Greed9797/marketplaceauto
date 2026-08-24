@@ -57,6 +57,7 @@ export async function GET(
         // Imagens de produto mudam raramente; cache privado no browser.
         "Cache-Control": "private, max-age=86400, stale-while-revalidate=604800",
         "Content-Security-Policy": "sandbox",
+        "X-Content-Type-Options": "nosniff",
       },
     });
   } catch (error: unknown) {

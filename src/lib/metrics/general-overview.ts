@@ -82,12 +82,6 @@ function brtBound(date: Date): Date {
   return new Date(date.getTime() + BRT_OFFSET_MS);
 }
 
-function dayAfter(date: Date): Date {
-  const next = new Date(date);
-  next.setUTCDate(next.getUTCDate() + 1);
-  return next;
-}
-
 function dateKeyBRT(date: Date): string {
   return new Date(date.getTime() + BRT_OFFSET_MS).toISOString().slice(0, 10);
 }
@@ -156,6 +150,9 @@ export async function getGeneralOverview(input: {
   workspaceId: string;
 }): Promise<GeneralOverview> {
   const now = new Date();
+  // Janelas exatas de 30 dias, semiabertas [from, to): a atual termina AGORA
+  // (o dia parcial de hoje fica fora) para não enviesar a comparação contra
+  // os 30 dias anteriores — mesma largura dos dois lados.
   const currentTo = now;
   const currentFrom = new Date(now.getTime() - WINDOW_DAYS * 86_400_000);
   const previousFrom = new Date(currentFrom.getTime() - WINDOW_DAYS * 86_400_000);
@@ -166,10 +163,10 @@ export async function getGeneralOverview(input: {
         workspaceId: input.workspaceId,
         platform: { in: [...MARKETPLACE_PLATFORMS] },
         OR: [
-          { orderCreatedAt: { gte: brtBound(currentFrom), lt: brtBound(dayAfter(currentTo)) } },
+          { orderCreatedAt: { gte: brtBound(currentFrom), lt: brtBound(currentTo) } },
           {
             orderCreatedAt: null,
-            placedAt: { gte: brtBound(currentFrom), lt: brtBound(dayAfter(currentTo)) },
+            placedAt: { gte: brtBound(currentFrom), lt: brtBound(currentTo) },
           },
         ],
       },
@@ -202,7 +199,9 @@ export async function getGeneralOverview(input: {
       where: {
         workspaceId: input.workspaceId,
         source: { in: MARKETPLACE_ADS_SOURCES },
-        date: { gte: previousFrom },
+        // Limite superior explícito: rows futuras (sync com clock à frente)
+        // não podem entrar no spend da janela corrente.
+        date: { gte: previousFrom, lt: currentTo },
       },
       select: {
         source: true,
@@ -231,7 +230,7 @@ export async function getGeneralOverview(input: {
   const current = aggregateOrders(
     currentOrders,
     brtBound(currentFrom),
-    brtBound(dayAfter(currentTo)),
+    brtBound(currentTo),
   );
   const previous = aggregateOrders(
     previousOrders,
@@ -243,7 +242,7 @@ export async function getGeneralOverview(input: {
   let currentSpend = 0;
   let previousSpend = 0;
   const spendBySourceCurrent = new Map<ConnectorProvider, number>();
-  const currentKeys = listWindowKeys(currentFrom, dayAfter(currentTo));
+  const currentKeys = listWindowKeys(currentFrom, currentTo);
   const previousKeys = listWindowKeys(previousFrom, currentFrom);
   const seriesByDay = new Map<string, { revenue: number; spend: number }>();
   const previousSeriesByDay = new Map<string, { revenue: number; spend: number }>();
@@ -417,10 +416,12 @@ export async function getGeneralOverview(input: {
       };
     }),
     accounts: accounts.sort((a, b) => {
-      const statusWeight = (status: string) =>
+      // Contas COM PROBLEMA primeiro (peso 0), saudáveis depois; dentro de
+      // cada grupo, sync mais recente primeiro.
+      const problemFirst = (status: string) =>
         status === "ACTIVE" ? 1 : 0;
       return (
-        statusWeight(a.status) - statusWeight(b.status) ||
+        problemFirst(a.status) - problemFirst(b.status) ||
         (b.lastSyncedAt?.getTime() ?? 0) - (a.lastSyncedAt?.getTime() ?? 0)
       );
     }),

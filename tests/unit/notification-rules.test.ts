@@ -1,8 +1,9 @@
 import { ConnectorProvider, ConnectorStatus } from "@prisma/client";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { prismaMocks } = vi.hoisted(() => ({
+const { prismaMocks, txMocks } = vi.hoisted(() => ({
   prismaMocks: {
+    $transaction: vi.fn(),
     notification: {
       findFirst: vi.fn(),
       create: vi.fn(),
@@ -11,6 +12,13 @@ const { prismaMocks } = vi.hoisted(() => ({
     produto: { findMany: vi.fn() },
     productInventory: { findMany: vi.fn() },
     connectorAccount: { findMany: vi.fn() },
+  },
+  txMocks: {
+    $executeRaw: vi.fn(),
+    notification: {
+      findFirst: vi.fn(),
+      create: vi.fn(),
+    },
   },
 }));
 
@@ -37,6 +45,12 @@ beforeEach(() => {
   vi.clearAllMocks();
   prismaMocks.notification.findFirst.mockResolvedValue(null);
   prismaMocks.notification.create.mockResolvedValue({});
+  prismaMocks.$transaction.mockImplementation(
+    async (fn: (tx: unknown) => Promise<unknown>) => fn(txMocks),
+  );
+  txMocks.$executeRaw.mockResolvedValue([]);
+  txMocks.notification.findFirst.mockResolvedValue(null);
+  txMocks.notification.create.mockResolvedValue({});
 });
 
 describe("detectRoasDrops", () => {
@@ -208,7 +222,10 @@ describe("evaluateWorkspaceNotificationRules", () => {
     prismaMocks.notification.findFirst
       .mockResolvedValueOnce({ id: "recent" }) // acc-1 em cooldown
       .mockResolvedValue(null);
-    prismaMocks.notification.create.mockResolvedValue({});
+    txMocks.notification.findFirst
+      .mockResolvedValueOnce({ id: "recent" })
+      .mockResolvedValue(null);
+    txMocks.notification.create.mockResolvedValue({});
 
     const created = await evaluateWorkspaceNotificationRules("ws-1");
 

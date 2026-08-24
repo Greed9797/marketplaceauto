@@ -42,13 +42,14 @@ function daysAgo(days: number): Date {
 async function isOnCooldown(
   workspaceId: string,
   draft: NotificationDraft,
+  since: Date,
 ): Promise<boolean> {
   const existing = await prisma.notification.findFirst({
     where: {
       workspaceId,
       type: draft.type,
       ...(draft.entityId ? { entityId: draft.entityId } : {}),
-      createdAt: { gte: daysAgo(1) },
+      createdAt: { gte: since },
     },
     select: { id: true },
   });
@@ -60,25 +61,32 @@ async function persistDrafts(
   workspaceId: string,
   drafts: NotificationDraft[],
 ): Promise<number> {
+  // Advisory lock por workspace: dois syncs concorrentes (cron + manual)
+  // passariam no check-then-insert ao mesmo tempo e duplicariam o alerta.
+  const since = daysAgo(1);
   let created = 0;
 
-  for (const draft of drafts) {
-    if (await isOnCooldown(workspaceId, draft)) continue;
+  await prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`notifications:${workspaceId}`}))`;
 
-    await prisma.notification.create({
-      data: {
-        workspaceId,
-        type: draft.type,
-        severity: draft.severity,
-        title: draft.title,
-        body: draft.body ?? null,
-        entityType: draft.entityType ?? null,
-        entityId: draft.entityId ?? null,
-        metadata: draft.metadata ?? undefined,
-      },
-    });
-    created += 1;
-  }
+    for (const draft of drafts) {
+      if (await isOnCooldown(workspaceId, draft, since)) continue;
+
+      await tx.notification.create({
+        data: {
+          workspaceId,
+          type: draft.type,
+          severity: draft.severity,
+          title: draft.title,
+          body: draft.body ?? null,
+          entityType: draft.entityType ?? null,
+          entityId: draft.entityId ?? null,
+          metadata: draft.metadata ?? undefined,
+        },
+      });
+      created += 1;
+    }
+  });
 
   return created;
 }
@@ -105,9 +113,10 @@ function formatBRL(value: number): string {
 export async function detectRoasDrops(
   workspaceId: string,
 ): Promise<NotificationDraft[]> {
+  // Cutoff único compartilhado pelas duas janelas — contíguas, sem gap.
   const recentStart = daysAgo(3);
   const baselineStart = daysAgo(10);
-  const baselineEnd = daysAgo(3);
+  const baselineEnd = recentStart;
 
   const rows = await prisma.dailyMetric.groupBy({
     by: ["campaignId", "campaignName"],
@@ -124,6 +133,13 @@ export async function detectRoasDrops(
   });
 
   if (rows.length === 0) return [];
+
+  const campaignNameById = new Map<string, string | null>();
+  for (const row of rows) {
+    if (row.campaignId && !campaignNameById.has(row.campaignId)) {
+      campaignNameById.set(row.campaignId, row.campaignName);
+    }
+  }
 
   const campaignIds = rows
     .map((row) => row.campaignId)
@@ -189,15 +205,14 @@ export async function detectRoasDrops(
 
     if (ratio >= ROAS_DROP_RATIO_WARNING) continue;
 
-    const name =
-      rows.find((r) => r.campaignId === campaignId)?.campaignName ?? campaignId;
+    const campaignName = campaignNameById.get(campaignId) ?? campaignId;
     const severity: NotificationSeverity =
       ratio < ROAS_DROP_RATIO_CRITICAL ? "critical" : "warning";
 
     drafts.push({
       type: "roas_drop",
       severity,
-      title: `Queda de ROAS em "${name}"`,
+      title: `Queda de ROAS em "${campaignName}"`,
       body: `ROAS caiu de ${baselineRoas.toFixed(1)} para ${recentRoas.toFixed(1)} nos últimos 3 dias (baseline de 7 dias). Investimento recente: ${formatBRL(recent.spend)}. Vale investigar criativos, público e concorrência.`,
       entityType: "campaign",
       entityId: campaignId,
