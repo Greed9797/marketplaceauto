@@ -18,6 +18,8 @@ export default defineConfig({
     exclude: ["node_modules/**", ".next/**", "tests/e2e/**"],
     globals: true,
     setupFiles: ["./tests/setup.ts"],
+    // next-auth importa "next/server" sem extensão (ESM) — o loader nativo do
+    // Node rejeita; inlining faz o Vite resolver via exports map do Next.
     server: {
       deps: {
         inline: ["next-auth", "@auth/core"],

@@ -72,16 +72,35 @@ export function classifyRateLimitTarget(input: {
   }
 
   if (
-    ["/api/clientes", "/api/produtos", "/api/publicacoes", "/api/workspace"].some(
-      (route) => input.pathname.startsWith(route),
-    )
+    [
+      "/api/clientes",
+      "/api/produtos",
+      "/api/publicacoes",
+      "/api/workspace",
+      "/api/ml",
+      "/api/shopee",
+    ].some((route) => input.pathname.startsWith(route))
   ) {
-    // Authenticated CRUD/sync usage — generous ceiling, still stops runaway
-    // clients and accidental sync loops from hammering the database.
+    // Authenticated CRUD/sync/publish usage — generous ceiling, still stops
+    // runaway clients and accidental sync loops from hammering integrations.
     return { keyPrefix: "app", limit: 120, window: "1 m" };
   }
 
   return null;
+}
+
+/**
+ * Dynamic segments (/api/produtos/clx123) would split one logical endpoint
+ * into unbounded buckets — an iterating sync loop would get a fresh budget
+ * per id. Collapse the app tier to its route prefix; fixed-path tiers keep
+ * the exact pathname.
+ */
+export function rateLimitKeyPath(target: RateLimitTarget, pathname: string) {
+  if (target.keyPrefix === "app") {
+    return `/${pathname.split("/").filter(Boolean).slice(0, 2).join("/")}`;
+  }
+
+  return pathname;
 }
 
 function isPlaceholderUpstash(env: EnvLike) {
@@ -264,7 +283,7 @@ export async function rateLimitMiddleware(request: NextRequest) {
   try {
     const result = await limitWithTimeout(
       target,
-      `${target.keyPrefix}:${clientIp(request)}:${sessionFingerprint}:${request.nextUrl.pathname}`,
+      `${target.keyPrefix}:${clientIp(request)}:${sessionFingerprint}:${rateLimitKeyPath(target, request.nextUrl.pathname)}`,
     );
 
     if (result.success) {

@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   classifyRateLimitTarget,
   rateLimitConfigError,
+  rateLimitKeyPath,
   shouldFailClosed,
   type RateLimitTarget,
 } from "@/lib/security/rate-limit";
@@ -94,6 +95,18 @@ describe("production rate limit helpers", () => {
     ).toMatchObject({ keyPrefix: "app", limit: 120 });
     expect(
       classifyRateLimitTarget({
+        pathname: "/api/ml/publicar",
+        method: "POST",
+      }),
+    ).toMatchObject({ keyPrefix: "app", limit: 120 });
+    expect(
+      classifyRateLimitTarget({
+        pathname: "/api/shopee/publicar",
+        method: "POST",
+      }),
+    ).toMatchObject({ keyPrefix: "app", limit: 120 });
+    expect(
+      classifyRateLimitTarget({
         pathname: "/api/observability/client-error",
         method: "POST",
       }),
@@ -110,6 +123,23 @@ describe("production rate limit helpers", () => {
     expect(
       classifyRateLimitTarget({ pathname: "/api/inngest", method: "POST" }),
     ).toBeNull();
+  });
+
+  it("collapses dynamic segments so the app tier cannot be fragmented", () => {
+    const appTarget: RateLimitTarget = { keyPrefix: "app", limit: 120, window: "1 m" };
+    const fixedTarget: RateLimitTarget = { keyPrefix: "ai", limit: 20, window: "1 m" };
+
+    // Mesmo bucket para ids diferentes do mesmo endpoint...
+    expect(rateLimitKeyPath(appTarget, "/api/produtos/clx123")).toBe(
+      "/api/produtos",
+    );
+    expect(rateLimitKeyPath(appTarget, "/api/produtos/clx456")).toBe(
+      "/api/produtos",
+    );
+    // ...e pathname exato preservado nos tiers de path fixo.
+    expect(rateLimitKeyPath(fixedTarget, "/api/ai/gerar-copy")).toBe(
+      "/api/ai/gerar-copy",
+    );
   });
 
   it("skips NextAuth GET reads but still limits auth mutations", () => {
