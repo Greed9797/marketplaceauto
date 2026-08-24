@@ -115,10 +115,10 @@ T10
 
 **Done when**:
 
-- [ ] Conta revogada/expirada não gera alerta (join com ConnectorAccount ativo)
-- [ ] Draft inclui entityId=connectorAccountId, métricas em metadata
-- [ ] Unit tests mockam prisma e cobrem cada limiar (ACs ROAS-01..04)
-- [ ] Gate check passes: `npx vitest run`
+- [x] Conta revogada/expirada não gera alerta (join com ConnectorAccount ativo)
+- [x] Draft inclui entityId=connectorAccountId, métricas em metadata
+- [x] Unit tests mockam prisma e cobrem cada limiar (ACs ROAS-01..04)
+- [x] Gate check passes: `npx vitest run`
 
 **Tests**: unit
 **Gate**: quick
