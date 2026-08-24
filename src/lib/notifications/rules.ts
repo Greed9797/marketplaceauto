@@ -2,6 +2,7 @@ import { ConnectorProvider, ConnectorStatus, type Prisma } from "@prisma/client"
 
 import { prisma } from "@/lib/db/prisma";
 import { dispatchNotifications } from "@/lib/notifications/channels";
+import { classifyRoasCause, stockAction, withCause } from "@/lib/notifications/causes";
 import {
   RUNWAY_WINDOW_DAYS,
   averageUnitsPerDay,
@@ -98,7 +99,13 @@ async function persistDrafts(
   return persisted;
 }
 
-type RoasWindow = { spend: number; revenue: number };
+type RoasWindow = {
+  spend: number;
+  revenue: number;
+  clicks: number;
+  impressions: number;
+  conversions: number;
+};
 
 function roasOf(window: RoasWindow): number {
   if (window.spend <= 0) return 0;
@@ -133,7 +140,7 @@ export async function detectRoasDrops(
       campaignId: { not: null },
       date: { gte: baselineStart },
     },
-    _sum: { spend: true, revenue: true },
+    _sum: { spend: true, revenue: true, clicks: true, impressions: true, conversions: true },
     // Janela completa por campanha; a separação recente/baseline é feita
     // abaixo com uma segunda query por janela (groupBy não suporta filtro
     // condicional por data no mesmo agregado).
@@ -161,7 +168,7 @@ export async function detectRoasDrops(
         campaignId: { in: campaignIds },
         date: { gte: recentStart },
       },
-      _sum: { spend: true, revenue: true },
+      _sum: { spend: true, revenue: true, clicks: true, impressions: true, conversions: true },
     }),
     prisma.dailyMetric.groupBy({
       by: ["campaignId"],
@@ -171,7 +178,7 @@ export async function detectRoasDrops(
         campaignId: { in: campaignIds },
         date: { gte: baselineStart, lt: baselineEnd },
       },
-      _sum: { spend: true, revenue: true },
+      _sum: { spend: true, revenue: true, clicks: true, impressions: true, conversions: true },
     }),
   ]);
 
@@ -181,6 +188,9 @@ export async function detectRoasDrops(
     recentByCampaign.set(row.campaignId, {
       spend: Number(row._sum.spend ?? 0),
       revenue: Number(row._sum.revenue ?? 0),
+      clicks: Number(row._sum.clicks ?? 0),
+      impressions: Number(row._sum.impressions ?? 0),
+      conversions: Number(row._sum.conversions ?? 0),
     });
   }
 
@@ -190,6 +200,9 @@ export async function detectRoasDrops(
     baselineByCampaign.set(row.campaignId, {
       spend: Number(row._sum.spend ?? 0),
       revenue: Number(row._sum.revenue ?? 0),
+      clicks: Number(row._sum.clicks ?? 0),
+      impressions: Number(row._sum.impressions ?? 0),
+      conversions: Number(row._sum.conversions ?? 0),
     });
   }
 
@@ -200,7 +213,13 @@ export async function detectRoasDrops(
     if (!campaignId) continue;
 
     const baseline = baselineByCampaign.get(campaignId);
-    const recent = recentByCampaign.get(campaignId) ?? { spend: 0, revenue: 0 };
+    const recent = recentByCampaign.get(campaignId) ?? {
+      spend: 0,
+      revenue: 0,
+      clicks: 0,
+      impressions: 0,
+      conversions: 0,
+    };
     if (!baseline || baseline.spend < ROAS_BASELINE_MIN_SPEND) continue;
     if (recent.spend < ROAS_RECENT_MIN_SPEND) continue;
 
@@ -216,20 +235,35 @@ export async function detectRoasDrops(
     const severity: NotificationSeverity =
       ratio < ROAS_DROP_RATIO_CRITICAL ? "critical" : "warning";
 
-    drafts.push({
-      type: "roas_drop",
-      severity,
-      title: `Queda de ROAS em "${campaignName}"`,
-      body: `ROAS caiu de ${baselineRoas.toFixed(1)} para ${recentRoas.toFixed(1)} nos últimos 3 dias (baseline de 7 dias). Investimento recente: ${formatBRL(recent.spend)}. Vale investigar criativos, público e concorrência.`,
-      entityType: "campaign",
-      entityId: campaignId,
-      metadata: {
-        baselineRoas: Number(baselineRoas.toFixed(2)),
-        recentRoas: Number(recentRoas.toFixed(2)),
-        baselineSpend: baseline.spend,
-        recentSpend: recent.spend,
-      },
+    // Matriz causa→ação (ACTN-01) com os sinais das janelas.
+    const rate = (num: number, den: number): number | null =>
+      den > 0 ? num / den : null;
+    const campaignVerdict = classifyRoasCause({
+      ctrBaseline: rate(baseline.clicks, baseline.impressions),
+      ctrRecent: rate(recent.clicks, recent.impressions),
+      cvrBaseline: rate(baseline.conversions, baseline.clicks),
+      cvrRecent: rate(recent.conversions, recent.clicks),
     });
+
+    drafts.push(
+      withCause(
+        {
+          type: "roas_drop",
+          severity,
+          title: `Queda de ROAS em "${campaignName}"`,
+          body: `ROAS caiu de ${baselineRoas.toFixed(1)} para ${recentRoas.toFixed(1)} nos últimos 3 dias (baseline de 7 dias). Investimento recente: ${formatBRL(recent.spend)}. Vale investigar criativos, público e concorrência.`,
+          entityType: "campaign",
+          entityId: campaignId,
+          metadata: {
+            baselineRoas: Number(baselineRoas.toFixed(2)),
+            recentRoas: Number(recentRoas.toFixed(2)),
+            baselineSpend: baseline.spend,
+            recentSpend: recent.spend,
+          },
+        },
+        campaignVerdict,
+      ),
+    );
   }
 
   return drafts;
@@ -355,18 +389,23 @@ export async function detectLowStock(
       runwayDays === null
         ? ""
         : ` Estimativa: cerca de ${runwayDays} ${runwayDays === 1 ? "dia" : "dias"} de estoque no ritmo atual de vendas.`;
+    const suggestedAction = stockAction(runwayDays);
+    const actionSentence = suggestedAction
+      ? ` Ação sugerida: ${suggestedAction}.`
+      : "";
 
     drafts.push({
       type: "low_stock",
       severity,
       title: `Estoque baixo: ${produto.nomeOriginal}`,
-      body: `Restam ${effectiveStock} unidade(s) e o anúncio está ativo em ${platforms.join(" e ")}.${runwaySentence} Reprova estoque ou pause o anúncio para não matar a campanha.`,
+      body: `Restam ${effectiveStock} unidade(s) e o anúncio está ativo em ${platforms.join(" e ")}.${runwaySentence}${actionSentence} Reprova estoque ou pause o anúncio para não matar a campanha.`,
       entityType: "produto",
       entityId: produto.id,
       metadata: {
         stock: effectiveStock,
         platforms,
         ...(runwayDays !== null ? { runwayDays } : {}),
+        ...(suggestedAction ? { suggestedAction } : {}),
       },
     });
   }

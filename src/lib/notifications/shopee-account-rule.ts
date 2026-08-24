@@ -3,6 +3,7 @@ import type { Prisma } from "@prisma/client";
 
 import { prisma } from "@/lib/db/prisma";
 
+import { classifyRoasCause, withCause } from "./causes";
 import type { NotificationDraft } from "./rules";
 import { computeLaggedWindows, roasRatio } from "./roas-windows";
 
@@ -80,12 +81,12 @@ export async function detectShopeeAccountRoasDrop(
       prisma.dailyMetric.groupBy({
         by: ["connectorAccountId"],
         where: spendWhere(recentStart, recentEnd),
-        _sum: { spend: true },
+        _sum: { spend: true, clicks: true, impressions: true },
       }),
       prisma.dailyMetric.groupBy({
         by: ["connectorAccountId"],
         where: spendWhere(baselineStart, baselineEnd),
-        _sum: { spend: true },
+        _sum: { spend: true, clicks: true, impressions: true },
       }),
       prisma.ecommerceOrder.groupBy({
         by: ["connectorAccountId"],
@@ -95,6 +96,7 @@ export async function detectShopeeAccountRoasDrop(
           OR: effectiveDateFilter(recentStart, recentEnd),
         },
         _sum: { orderTotal: true },
+        _count: { _all: true },
       }),
       prisma.ecommerceOrder.groupBy({
         by: ["connectorAccountId"],
@@ -104,6 +106,7 @@ export async function detectShopeeAccountRoasDrop(
           OR: effectiveDateFilter(baselineStart, baselineEnd),
         },
         _sum: { orderTotal: true },
+        _count: { _all: true },
       }),
     ]);
 
@@ -114,6 +117,17 @@ export async function detectShopeeAccountRoasDrop(
   ): number =>
     toNumber(
       rows.find((row) => row.connectorAccountId === accountId)?._sum[field],
+    );
+
+  const countByAccount = (
+    rows: Array<{
+      connectorAccountId: string;
+      _count?: { _all?: number };
+    }>,
+    accountId: string,
+  ): number =>
+    toNumber(
+      rows.find((row) => row.connectorAccountId === accountId)?._count?._all,
     );
 
   const drafts: NotificationDraft[] = [];
@@ -144,25 +158,56 @@ export async function detectShopeeAccountRoasDrop(
 
     if (ratio >= DROP_RATIO_WARNING) continue;
 
+    // Sinais da matriz causa→ação (ACTN-01): CTR por impressão e CVR
+    // (pedidos por clique) nas duas janelas.
+    const ctrOf = (clicks: number, impressions: number): number | null =>
+      impressions > 0 ? clicks / impressions : null;
+    const cvrOf = (orders: number, clicks: number): number | null =>
+      clicks > 0 ? orders / clicks : null;
+
+    const verdict = classifyRoasCause({
+      ctrBaseline: ctrOf(
+        sumByAccount(baselineSpendRows, account.id, "clicks"),
+        sumByAccount(baselineSpendRows, account.id, "impressions"),
+      ),
+      ctrRecent: ctrOf(
+        sumByAccount(recentSpendRows, account.id, "clicks"),
+        sumByAccount(recentSpendRows, account.id, "impressions"),
+      ),
+      cvrBaseline: cvrOf(
+        countByAccount(baselineRevenueRows, account.id),
+        sumByAccount(baselineSpendRows, account.id, "clicks"),
+      ),
+      cvrRecent: cvrOf(
+        countByAccount(recentRevenueRows, account.id),
+        sumByAccount(recentSpendRows, account.id, "clicks"),
+      ),
+    });
+
     const severity =
       ratio < DROP_RATIO_CRITICAL ? ("critical" as const) : ("warning" as const);
 
-    drafts.push({
-      type: "roas_drop",
-      severity,
-      title: `Queda de ROAS na conta "${account.accountName}"`,
-      body: `ROAS da conta Shopee caiu de ${baselineRoas.toFixed(1)} para ${recentRoas.toFixed(1)} nos últimos 3 dias (baseline de 7 dias, atribuição de até 72h já compensada). Investimento recente: ${formatBRL(recentSpend)}. Vale revisar criativos, preços e concorrência.`,
-      entityType: "connector_account",
-      entityId: account.id,
-      metadata: {
-        scope: "account",
-        provider: ConnectorProvider.SHOPEE_ADS,
-        baselineRoas: Number(baselineRoas.toFixed(2)),
-        recentRoas: Number(recentRoas.toFixed(2)),
-        baselineSpend,
-        recentSpend,
-      },
-    });
+    drafts.push(
+      withCause(
+        {
+          type: "roas_drop",
+          severity,
+          title: `Queda de ROAS na conta "${account.accountName}"`,
+          body: `ROAS da conta Shopee caiu de ${baselineRoas.toFixed(1)} para ${recentRoas.toFixed(1)} nos últimos 3 dias (baseline de 7 dias, atribuição de até 72h já compensada). Investimento recente: ${formatBRL(recentSpend)}. Vale revisar criativos, preços e concorrência.`,
+          entityType: "connector_account",
+          entityId: account.id,
+          metadata: {
+            scope: "account",
+            provider: ConnectorProvider.SHOPEE_ADS,
+            baselineRoas: Number(baselineRoas.toFixed(2)),
+            recentRoas: Number(recentRoas.toFixed(2)),
+            baselineSpend,
+            recentSpend,
+          },
+        },
+        verdict,
+      ),
+    );
   }
 
   return drafts;

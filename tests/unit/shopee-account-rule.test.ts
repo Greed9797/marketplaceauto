@@ -23,7 +23,11 @@ function spendRow(accountId: string, spend: number) {
 }
 
 function revenueRow(accountId: string, orderTotal: number) {
-  return { connectorAccountId: accountId, _sum: { orderTotal } };
+  return {
+    connectorAccountId: accountId,
+    _sum: { orderTotal },
+    _count: { _all: 1 },
+  };
 }
 
 /**

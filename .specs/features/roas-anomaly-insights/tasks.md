@@ -9,7 +9,7 @@ Implement these tasks with the `tlc-spec-driven` skill: **activate it by name an
 ---
 
 **Design**: `.specs/features/roas-anomaly-insights/design.md`
-**Status**: In Progress
+**Status**: Done
 
 ---
 
@@ -287,9 +287,9 @@ T10
 
 **Done when**:
 
-- [ ] Cada linha da matriz tem teste 1:1
-- [ ] Sinais ausentes → recomendação genérica preservada
-- [ ] Gate check passes: `npx vitest run`
+- [x] Cada linha da matriz tem teste 1:1
+- [x] Sinais ausentes → recomendação genérica preservada
+- [x] Gate check passes: `npx vitest run`
 
 **Tests**: unit
 **Gate**: quick
