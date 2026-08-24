@@ -261,6 +261,8 @@ T8 → T9
 
 ### T9: Produto derivado revisável do kit
 
+**Status**: Complete
+
 **What**: Relacionar `Kit` a um `Produto` derivado 1:1 e implementar criação idempotente no fluxo de aprovação. O rascunho recebe título/descrição/galeria sugeridos dos componentes, preço final do kit, quantidade conservadora pelo menor estoque e `origem=kit`; categoria Shopee só é copiada quando todos os componentes têm a mesma categoria não nula. Expor o `produtoId` na listagem para abrir o editor existente antes da publicação.
 **Where**: `prisma/schema.prisma`, migration, `src/lib/kits/derived-product.ts`, `src/app/api/kits/proposals/route.ts`, `src/app/(app)/kits/kits-client.tsx`
 **Depends on**: T7, T8
@@ -269,11 +271,11 @@ T8 → T9
 
 **Done when**:
 
-- [ ] Aprovação cria ou reutiliza exatamente um Produto derivado por Kit; retry não duplica
-- [ ] Título, descrição, imagens, preço e quantidade derivados têm testes determinísticos
-- [ ] Categoria comum é copiada; categoria ausente/divergente permanece nula e aparece como pendência para revisão
-- [ ] UI mostra ação "Revisar anúncio" ligada ao editor do Produto derivado
-- [ ] Migration aditiva e sem destructive; `npx prisma validate` e build passam
+- [x] Aprovação cria ou reutiliza exatamente um Produto derivado por Kit; retry não duplica
+- [x] Título, descrição, imagens, preço e quantidade derivados têm testes determinísticos
+- [x] Categoria comum é copiada; categoria ausente/divergente permanece nula e aparece como pendência para revisão
+- [x] UI mostra ação "Revisar anúncio" ligada ao editor do Produto derivado
+- [x] Migration aditiva e sem destructive; `npx prisma validate` e build passam
 
 **Tests**: unit + integration
 **Gate**: build

@@ -2,10 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
+  ensureDerivedProdutoMock,
   prismaMock,
   requireClienteInWorkspaceMock,
   requirePublisherWorkspaceMock,
 } = vi.hoisted(() => ({
+  ensureDerivedProdutoMock: vi.fn(),
   prismaMock: {
     kitProposal: {
       findFirst: vi.fn(),
@@ -22,6 +24,9 @@ const {
 }));
 
 vi.mock("@/lib/db/prisma", () => ({ prisma: prismaMock }));
+vi.mock("@/lib/kits/derived-product", () => ({
+  ensureDerivedProduto: ensureDerivedProdutoMock,
+}));
 vi.mock("@/lib/publisher/route-guard", () => ({
   requireClienteInWorkspace: requireClienteInWorkspaceMock,
   requirePublisherWorkspace: requirePublisherWorkspaceMock,
@@ -87,6 +92,10 @@ beforeEach(() => {
     status: "aprovado",
     price: 100,
   });
+  ensureDerivedProdutoMock.mockResolvedValue({
+    id: "derived-1",
+    categoriaShopeeId: null,
+  });
   prismaMock.$transaction.mockImplementation(
     async (callback: (client: typeof prismaMock) => unknown) =>
       callback(prismaMock),
@@ -142,6 +151,43 @@ describe("GET /api/kits/proposals", () => {
         }),
       }),
     );
+  });
+
+  it("expoe produto derivado para revisao no editor (KIT-13)", async () => {
+    prismaMock.kitProposal.findMany.mockResolvedValueOnce([
+      proposal({
+        status: "aprovada",
+        kit: {
+          id: "kit-1",
+          status: "aprovado",
+          price: 100,
+          produtoId: "derived-1",
+          produto: { categoriaShopeeId: null },
+        },
+      }),
+    ]);
+    prismaMock.produto.findMany.mockResolvedValueOnce([
+      product("product-1"),
+      product("product-2"),
+    ]);
+
+    const response = await GET(getRequest());
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      success: true,
+      data: {
+        proposals: [
+          expect.objectContaining({
+            status: "aprovado",
+            kit: expect.objectContaining({
+              produtoId: "derived-1",
+              categoryPending: true,
+            }),
+          }),
+        ],
+      },
+    });
   });
 
   it("valida filtro e impede cliente cross-workspace (KIT-16)", async () => {
@@ -250,7 +296,15 @@ describe("PATCH /api/kits/proposals", () => {
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({
       success: true,
-      data: { kit: { id: "kit-1", status: "aprovado", price: 129.9 } },
+      data: {
+        kit: {
+          id: "kit-1",
+          status: "aprovado",
+          price: 129.9,
+          produtoId: "derived-1",
+          categoryPending: true,
+        },
+      },
     });
     expect(prismaMock.kit.upsert).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -263,6 +317,10 @@ describe("PATCH /api/kits/proposals", () => {
         }),
       }),
     );
+    expect(ensureDerivedProdutoMock).toHaveBeenCalledWith({
+      kitId: "kit-1",
+      workspaceId: "workspace-1",
+    });
   });
 
   it("bloqueia Kit quando componente esta abaixo do estoque minimo (KIT-15)", async () => {
@@ -295,7 +353,15 @@ describe("PATCH /api/kits/proposals", () => {
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({
       success: true,
-      data: { kit: { id: "kit-1", status: "bloqueado", price: 100 } },
+      data: {
+        kit: {
+          id: "kit-1",
+          status: "bloqueado",
+          price: 100,
+          produtoId: "derived-1",
+          categoryPending: true,
+        },
+      },
     });
     expect(prismaMock.kit.upsert).toHaveBeenCalledWith(
       expect.objectContaining({

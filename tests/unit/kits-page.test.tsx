@@ -37,7 +37,13 @@ function proposal(input: {
     kit:
       input.status === "proposta"
         ? null
-        : { id: `kit-${input.id}`, status: input.status, price: 109.9 },
+        : {
+            id: `kit-${input.id}`,
+            status: input.status,
+            price: 109.9,
+            produtoId: `derived-${input.id}`,
+            categoryPending: true,
+          },
   };
 }
 
@@ -84,7 +90,15 @@ function mockApi(input: {
       }
       return response({
         success: true,
-        data: { kit: { id: "kit-proposal-1", status: "aprovado", price: 125 } },
+        data: {
+          kit: {
+            id: "kit-proposal-1",
+            status: "aprovado",
+            price: 125,
+            produtoId: "derived-proposal-1",
+            categoryPending: true,
+          },
+        },
       });
     }
     if (url === "/api/kits/classifications" && init?.method === "PATCH") {
@@ -143,6 +157,19 @@ describe("KitsClient", () => {
 
     expect(await screen.findByText("Nenhum kit encontrado.")).toBeInTheDocument();
     expect(screen.getByText("Fila de revisão vazia.")).toBeInTheDocument();
+  });
+
+  it("liga o Kit aprovado ao editor do Produto derivado (KIT-13)", async () => {
+    mockApi({ proposals: [proposal({ id: "proposal-1", status: "aprovado" })] });
+
+    render(<KitsClient />);
+
+    const link = await screen.findByRole("link", { name: "Revisar anúncio" });
+    expect(link).toHaveAttribute(
+      "href",
+      "/produtos/derived-proposal-1/editar",
+    );
+    expect(screen.getByText("Categoria pendente")).toBeInTheDocument();
   });
 
   it("aprova com preco editado e mostra o Kit aprovado (KIT-13)", async () => {

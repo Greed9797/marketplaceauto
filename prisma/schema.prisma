@@ -640,6 +640,7 @@ model Produto {
   updatedAt         DateTime               @updatedAt
   publicacoes       Publicacao[]
   classification    ProductClassification?
+  derivedKit        Kit?                  @relation("KitDerivedProduto")
 
   @@index([clienteId])
 }
@@ -701,6 +702,8 @@ model Kit {
   proposal     KitProposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
   clienteId    String
   cliente      Cliente     @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  produtoId    String?     @unique
+  produto      Produto?    @relation("KitDerivedProduto", fields: [produtoId], references: [id], onDelete: SetNull)
   price        Decimal     @db.Decimal(14, 2)
   status       String      @default("aprovado")
   shopeeItemId String?

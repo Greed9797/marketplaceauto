@@ -4,6 +4,7 @@ import { z } from "zod";
 
 import { isNextControlFlowError } from "@/lib/connectors/oauth-route-error";
 import { prisma } from "@/lib/db/prisma";
+import { ensureDerivedProduto } from "@/lib/kits/derived-product";
 import {
   requireClienteInWorkspace,
   requirePublisherWorkspace,
@@ -160,7 +161,15 @@ export async function GET(request: NextRequest) {
         monochromatic: true,
         status: true,
         cliente: { select: { id: true, nome: true } },
-        kit: { select: { id: true, status: true, price: true } },
+        kit: {
+          select: {
+            id: true,
+            status: true,
+            price: true,
+            produtoId: true,
+            produto: { select: { categoriaShopeeId: true } },
+          },
+        },
       },
       orderBy: { createdAt: "desc" },
     });
@@ -218,6 +227,10 @@ export async function GET(request: NextRequest) {
                   id: proposal.kit.id,
                   status: proposal.kit.status,
                   price: Number(proposal.kit.price),
+                  produtoId: proposal.kit.produtoId,
+                  categoryPending:
+                    proposal.kit.produtoId !== null &&
+                    proposal.kit.produto?.categoriaShopeeId == null,
                 }
               : null,
           };
@@ -303,11 +316,21 @@ export async function PATCH(request: NextRequest) {
         select: { id: true, status: true, price: true },
       });
     });
+    const produto = await ensureDerivedProduto({
+      kitId: kit.id,
+      workspaceId: guard.workspaceId,
+    });
 
     return NextResponse.json({
       success: true,
       data: {
-        kit: { id: kit.id, status: kit.status, price: Number(kit.price) },
+        kit: {
+          id: kit.id,
+          status: kit.status,
+          price: Number(kit.price),
+          produtoId: produto.id,
+          categoryPending: produto.categoriaShopeeId === null,
+        },
       },
     });
   } catch (error: unknown) {

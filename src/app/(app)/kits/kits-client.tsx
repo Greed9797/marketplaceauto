@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { Badge, type BadgeProps } from "@/components/ui/badge";
@@ -24,7 +25,13 @@ type Proposal = {
   monochromatic: boolean;
   status: ProposalStatus;
   suggestedPrice: number;
-  kit: { id: string; status: string; price: number } | null;
+  kit: {
+    id: string;
+    status: string;
+    price: number;
+    produtoId: string | null;
+    categoryPending: boolean;
+  } | null;
 };
 
 type Classification = {
@@ -201,7 +208,13 @@ export function KitsClient() {
     setNotice(null);
     try {
       const data = await readApi<{
-        kit?: { id: string; status: ProposalStatus; price: number };
+        kit?: {
+          id: string;
+          status: ProposalStatus;
+          price: number;
+          produtoId: string;
+          categoryPending: boolean;
+        };
         proposal?: { id: string; status: string };
       }>(
         await fetch("/api/kits/proposals", {
@@ -624,6 +637,19 @@ export function KitsClient() {
                             disabled={busyId === proposal.id}
                           >
                             Rejeitar
+                          </Button>
+                        </div>
+                      ) : proposal.kit?.produtoId ? (
+                        <div className="space-y-2">
+                          {proposal.kit.categoryPending ? (
+                            <Badge tone="warning">Categoria pendente</Badge>
+                          ) : null}
+                          <Button asChild size="sm" variant="secondary">
+                            <Link
+                              href={`/produtos/${proposal.kit.produtoId}/editar`}
+                            >
+                              Revisar anúncio
+                            </Link>
                           </Button>
                         </div>
                       ) : null}
