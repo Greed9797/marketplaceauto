@@ -4,6 +4,7 @@ import { ConnectorProvider, Prisma } from "@prisma/client";
 import * as Sentry from "@sentry/nextjs";
 
 import { prisma } from "@/lib/db/prisma";
+import { evaluateWorkspaceNotificationRules } from "@/lib/notifications/rules";
 import { RETRYABLE_CONNECTOR_STATUSES } from "@/lib/connectors/sync-error";
 import { SYNC_HELPERS } from "@/lib/connectors/sync-helpers";
 import {
@@ -368,6 +369,19 @@ export async function runWorkspaceSync(
       });
     }
     const elapsedSec = Math.round((Date.now() - startedAt) / 1000);
+
+    // Avalia regras de notificação (queda de ROAS, estoque baixo, saúde de
+    // conta) com os dados recém-sincronizados. Fire-and-forget: falha aqui
+    // nunca pode marcar o sync como erro.
+    void evaluateWorkspaceNotificationRules(workspaceId).catch(
+      (notifErr: unknown) => {
+        console.error(
+          `[sync-orchestrator] notification rules failed workspace=${workspaceId}: ${
+            notifErr instanceof Error ? notifErr.message : "unknown"
+          }`,
+        );
+      },
+    );
 
     console.info(
       `[sync-orchestrator] done workspace=${workspaceId} elapsed=${elapsedSec}s status=${

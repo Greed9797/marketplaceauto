@@ -1,7 +1,9 @@
 "use client";
 
 import {
+  BellRing,
   FileBarChart,
+  Gauge,
   HelpCircle,
   LayoutDashboard,
   LogOut,
@@ -29,6 +31,8 @@ import { useMobileNav } from "./mobile-nav-context";
 
 export type SidebarIconKey =
   | "dashboard"
+  | "painel_geral"
+  | "notificacoes"
   | "brands"
   | "clientes"
   | "produtos"
@@ -65,6 +69,8 @@ type SidebarClientProps = {
 
 const iconMap: Record<SidebarIconKey, LucideIcon> = {
   dashboard: LayoutDashboard,
+  painel_geral: Gauge,
+  notificacoes: BellRing,
   brands: PanelsTopLeft,
   clientes: Store,
   produtos: Package,

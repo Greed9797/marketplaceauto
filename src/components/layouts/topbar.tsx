@@ -3,6 +3,7 @@ import { ThemeToggle } from "@/components/theme/theme-toggle";
 import type { getCurrentUserContext } from "@/lib/auth/current";
 import { getWorkspaceRoleDefinition } from "@/lib/auth/permissions";
 import { canAddWorkspaceConnectors } from "@/lib/auth/platform-permissions";
+import { NotificationBell } from "@/components/notifications/notification-bell";
 import { MobileNavTrigger } from "./mobile-nav-trigger";
 import { SyncButton } from "./sync-button";
 import { TopbarHeading } from "./topbar-heading";
@@ -28,6 +29,7 @@ export function Topbar({ context }: { context: AppContext }) {
         />
       </div>
       <div className="flex flex-wrap items-center gap-2">
+        <NotificationBell />
         <ThemeToggle />
         {canSync ? <SyncButton /> : null}
       </div>

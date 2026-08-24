@@ -26,6 +26,18 @@ export function Sidebar({ context }: { context: AppContext }) {
       icon: "dashboard",
       section: "overview",
     },
+    {
+      label: "Painel geral",
+      href: "/dashboard/geral",
+      icon: "painel_geral",
+      section: "overview",
+    },
+    {
+      label: "Notificações",
+      href: "/notificacoes",
+      icon: "notificacoes",
+      section: "overview",
+    },
     ...(canViewBrands(context.user)
       ? [
           {
