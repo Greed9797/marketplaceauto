@@ -184,3 +184,43 @@ select {
 .scrollbar-stable {
   scrollbar-gutter: stable;
 }
+
+/* Browser surfaces — the parts we didn't draw still carry the design.
+   Focus, caret, scrollbars and data numerals follow the W3 palette instead
+   of shipping platform defaults. */
+:focus-visible {
+  outline: 2px solid var(--w3-red);
+  outline-offset: 2px;
+}
+
+button,
+input,
+textarea,
+select {
+  caret-color: var(--w3-red);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: var(--radius-pill);
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+.text-kpi {
+  font-variant-numeric: tabular-nums;
+}
