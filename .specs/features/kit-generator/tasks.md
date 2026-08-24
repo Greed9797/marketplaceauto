@@ -312,6 +312,8 @@ T8 → T9
 
 ### T11: Rota de publicação em lote (P2)
 
+**Status**: Complete
+
 **What**: Criar `POST /api/kits/publish` recebendo kitIds aprovados, executando publishKitBatch com gate de permissão e retorno parcial.
 **Where**: `src/app/api/kits/publish/route.ts`
 **Depends on**: T10
@@ -320,9 +322,9 @@ T8 → T9
 
 **Done when**:
 
-- [ ] Route tests happy/edge/erro + permissão
-- [ ] Kit sem estoque no publish → 200 parcial com kit marcado bloqueado
-- [ ] Gate check passes: Full
+- [x] Route tests happy/edge/erro + permissão
+- [x] Kit sem estoque no publish → 200 parcial com kit marcado bloqueado
+- [x] Gate check passes: Full
 
 **Tests**: integration
 **Gate**: full

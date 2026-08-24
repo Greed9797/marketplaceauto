@@ -151,7 +151,7 @@ um e verificar relatório parcial.
 | KIT-16 | P1: Lista com status/filtros | T7-T8 | Complete |
 | KPUB-01 | P2: Publicação em lote Shopee | T9-T12 | In Progress |
 | KPUB-02 | P2: Falha isolada por kit | T10-T12 | In Progress |
-| KPUB-03 | P2: Checagem de estoque no publish | T10-T11 | In Progress |
+| KPUB-03 | P2: Checagem de estoque no publish | T10-T11 | Complete |
 
 **Coverage:** 19 total, 19 mapped to tasks, 0 unmapped.
 
