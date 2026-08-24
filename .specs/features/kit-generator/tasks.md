@@ -284,6 +284,8 @@ T8 → T9
 
 ### T10: Serviço de publicação de kits (P2)
 
+**Status**: Complete
+
 **What**: Implementar `publishKitBatch(kitIds)`: exige Kit aprovado com Produto derivado completo, revalida estoque no momento da publicação, chama o fluxo Shopee existente com `produtoId`, sincroniza `shopeeItemId`/status no Kit e isola falhas por item.
 **Where**: `src/lib/kits/publish.ts`
 **Depends on**: T9
@@ -297,11 +299,11 @@ T8 → T9
 
 **Done when**:
 
-- [ ] Unit tests com publisher mockado: sucesso, falha isolada, estoque insuficiente → pula e bloqueia
-- [ ] Produto derivado ausente/incompleto → erro por kit sem chamada ao publisher
-- [ ] Retry de kit já publicado não cria anúncio duplicado
-- [ ] Relatório parcial retornável {publicado, erros[]}
-- [ ] Gate check passes: `npx vitest run`
+- [x] Unit tests com publisher mockado: sucesso, falha isolada, estoque insuficiente → pula e bloqueia
+- [x] Produto derivado ausente/incompleto → erro por kit sem chamada ao publisher
+- [x] Retry de kit já publicado não cria anúncio duplicado
+- [x] Relatório parcial retornável {publicado, erros[]}
+- [x] Gate check passes: `npx vitest run`
 
 **Tests**: unit
 **Gate**: quick
