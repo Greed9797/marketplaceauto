@@ -138,13 +138,13 @@ um e verificar relatório parcial.
 | KIT-03 | P1: Falha de IA não bloqueia lote | T3-T4 | Complete |
 | KIT-04 | P1: Override manual permanente | T1, T3 | Complete |
 | KIT-05 | P1: Lote ≤50 com retomada | T3-T4 | Complete |
-| KIT-06 | P1: Camada 1 gênero+idade | - | Pending |
-| KIT-07 | P1: Homogêneos e matriz de pares | - | Pending |
-| KIT-08 | P1: Trava de estoque ≥2 | - | Pending |
-| KIT-09 | P1: Faixa de preço 1:5 | - | Pending |
-| KIT-10 | P1: Motivo na proposta | - | Pending |
-| KIT-11 | P1: Preferência cor distinta | - | Pending |
-| KIT-12 | P1: Priorização giro alto+lento | - | Pending |
+| KIT-06 | P1: Camada 1 gênero+idade | T5 | Complete |
+| KIT-07 | P1: Homogêneos e matriz de pares | T5 | Complete |
+| KIT-08 | P1: Trava de estoque ≥2 | T5 | Complete |
+| KIT-09 | P1: Faixa de preço 1:5 | T5 | Complete |
+| KIT-10 | P1: Motivo na proposta | T5 | Complete |
+| KIT-11 | P1: Preferência cor distinta | T5 | Complete |
+| KIT-12 | P1: Priorização giro alto+lento | T5 | In Progress |
 | KIT-13 | P1: Aprovação persiste kit | - | Pending |
 | KIT-14 | P1: Rejeição impede reproposta | T1 | In Progress |
 | KIT-15 | P1: Bloqueio por estoque | - | Pending |

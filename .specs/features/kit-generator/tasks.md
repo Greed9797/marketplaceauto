@@ -168,6 +168,8 @@ T10 → T11
 
 ### T5: Engine de compatibilidade (pura)
 
+**Status**: Complete
+
 **What**: Implementar `buildProposals`: camada 1 rígida (gender+ageBand, unissex cruza ambos), homogêneos 2–5 itens, pares complementares aprovados, trava de estoque ≥min, preço ≤5×, preferência cor distinta + flag monocromático, ordenação giro alto+lento, motivo legível.
 **Where**: `src/lib/kits/engine.ts`
 **Depends on**: T1
@@ -181,10 +183,10 @@ T10 → T11
 
 **Done when**:
 
-- [ ] Um teste por AC (KIT-06..12) com catálogo sintético
-- [ ] Pares inválidos (gênero divergente, estoque 1, preço 10x) descartados
-- [ ] Função pura: nenhum IO
-- [ ] Gate check passes: `npx vitest run`
+- [x] Um teste por AC (KIT-06..12) com catálogo sintético
+- [x] Pares inválidos (gênero divergente, estoque 1, preço 10x) descartados
+- [x] Função pura: nenhum IO
+- [x] Gate check passes: `npx vitest run`
 
 **Tests**: unit
 **Gate**: quick
