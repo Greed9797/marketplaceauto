@@ -216,6 +216,8 @@ T10 → T11
 
 ### T7: Rotas de propostas (listar/aprovar/rejeitar)
 
+**Status**: Complete
+
 **What**: Criar `GET/PATCH /api/kits/proposals`: listagem filtrável por status/cliente; aprovar persiste `Kit` com preço informado; rejeitar grava status; estoque abaixo do mínimo marca kit `bloqueado`.
 **Where**: `src/app/api/kits/proposals/route.ts`
 **Depends on**: T6
@@ -224,10 +226,10 @@ T10 → T11
 
 **Done when**:
 
-- [ ] Route tests: happy/edge/erro + gate de permissão
-- [ ] Aprovação cria Kit 1:1 com Proposal (teste)
-- [ ] Componente sem estoque → bloqueio automático (teste)
-- [ ] Gate check passes: Full
+- [x] Route tests: happy/edge/erro + gate de permissão
+- [x] Aprovação cria Kit 1:1 com Proposal (teste)
+- [x] Componente sem estoque → bloqueio automático (teste)
+- [x] Gate check passes: Full
 
 **Tests**: integration
 **Gate**: full

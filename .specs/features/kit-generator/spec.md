@@ -145,10 +145,10 @@ um e verificar relatório parcial.
 | KIT-10 | P1: Motivo na proposta | T5 | Complete |
 | KIT-11 | P1: Preferência cor distinta | T5 | Complete |
 | KIT-12 | P1: Priorização giro alto+lento | T5-T6 | Complete |
-| KIT-13 | P1: Aprovação persiste kit | - | Pending |
-| KIT-14 | P1: Rejeição impede reproposta | T1, T6 | Complete |
-| KIT-15 | P1: Bloqueio por estoque | - | Pending |
-| KIT-16 | P1: Lista com status/filtros | - | Pending |
+| KIT-13 | P1: Aprovação persiste kit | T7 | Complete |
+| KIT-14 | P1: Rejeição impede reproposta | T1, T6-T7 | Complete |
+| KIT-15 | P1: Bloqueio por estoque | T7 | Complete |
+| KIT-16 | P1: Lista com status/filtros | T7-T8 | In Progress |
 | KPUB-01 | P2: Publicação em lote Shopee | - | Pending |
 | KPUB-02 | P2: Falha isolada por kit | - | Pending |
 | KPUB-03 | P2: Checagem de estoque no publish | - | Pending |
