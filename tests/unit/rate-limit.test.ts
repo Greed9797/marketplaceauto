@@ -73,6 +73,18 @@ describe("production rate limit helpers", () => {
       classifyRateLimitTarget({ pathname: "/api/upload", method: "POST" }),
     ).toMatchObject({ keyPrefix: "upload", limit: 30 });
     expect(
+      classifyRateLimitTarget({
+        pathname: "/api/files/ws-1/clx123",
+        method: "GET",
+      }),
+    ).toMatchObject({ keyPrefix: "upload", limit: 120 });
+    expect(
+      classifyRateLimitTarget({
+        pathname: "/api/platform-files/clx123",
+        method: "GET",
+      }),
+    ).toMatchObject({ keyPrefix: "upload", limit: 120 });
+    expect(
       classifyRateLimitTarget({ pathname: "/api/clientes", method: "GET" }),
     ).toMatchObject({ keyPrefix: "app", limit: 120 });
     expect(

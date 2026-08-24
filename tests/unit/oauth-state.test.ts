@@ -85,4 +85,78 @@ describe("connector OAuth state", () => {
       }).valid,
     ).toBe(false);
   });
+
+  it("round-trips the signed platform scope for the global Drive flow", () => {
+    const state = createConnectorOAuthState(
+      {
+        provider: "GOOGLE_DRIVE",
+        userId: "admin-1",
+        workspaceId: "workspace-1",
+        scope: "platform",
+      },
+      { secret, now: 1_778_966_400_000, nonce: "nonce-2" },
+    );
+
+    const verified = verifyConnectorOAuthState(state, {
+      secret,
+      expectedProvider: "GOOGLE_DRIVE",
+      expectedUserId: "admin-1",
+      now: 1_778_966_405_000,
+    });
+
+    expect(verified.valid).toBe(true);
+    expect(verified.valid && verified.payload.scope).toBe("platform");
+  });
+
+  it("does not grant platform scope to a state created without it", () => {
+    const state = createConnectorOAuthState(
+      {
+        provider: "GOOGLE_DRIVE",
+        userId: "user-1",
+        workspaceId: "workspace-1",
+      },
+      { secret, now: 1_778_966_400_000, nonce: "nonce-3" },
+    );
+
+    const verified = verifyConnectorOAuthState(state, {
+      secret,
+      expectedProvider: "GOOGLE_DRIVE",
+      expectedUserId: "user-1",
+      now: 1_778_966_405_000,
+    });
+
+    expect(verified.valid).toBe(true);
+    expect(verified.valid && verified.payload.scope).toBeUndefined();
+  });
+
+  it("rejects a state whose scope was tampered after signing", () => {
+    const state = createConnectorOAuthState(
+      {
+        provider: "GOOGLE_DRIVE",
+        userId: "user-1",
+        workspaceId: "workspace-1",
+      },
+      { secret, now: 1_778_966_400_000, nonce: "nonce-4" },
+    );
+    const parsed = parseConnectorOAuthState(state);
+    const forgedPayload = base64UrlEncodeJson({
+      ...parsed.payload,
+      scope: "platform",
+    });
+    // Payload forjado com a assinatura original — a HMAC deve falhar.
+    const forged = `${forgedPayload}.${parsed.signature}`;
+
+    expect(
+      verifyConnectorOAuthState(forged, {
+        secret,
+        expectedProvider: "GOOGLE_DRIVE",
+        expectedUserId: "user-1",
+        now: 1_778_966_405_000,
+      }).valid,
+    ).toBe(false);
+  });
 });
+
+function base64UrlEncodeJson(value: unknown) {
+  return Buffer.from(JSON.stringify(value)).toString("base64url");
+}

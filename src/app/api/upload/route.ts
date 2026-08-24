@@ -4,6 +4,9 @@ import {
   getActiveDriveAccount,
   uploadImageToWorkspaceDrive,
 } from "@/lib/connectors/google-drive/storage";
+import {
+  uploadImageToPlatformDrive,
+} from "@/lib/connectors/google-drive/platform";
 import { isNextControlFlowError } from "@/lib/connectors/oauth-route-error";
 import { prisma } from "@/lib/db/prisma";
 import { requirePublisherWorkspace } from "@/lib/publisher/route-guard";
@@ -61,20 +64,42 @@ export async function POST(request: NextRequest) {
     const buffer = Buffer.from(await file.arrayBuffer());
     const safeName = slugifySegment(file.name) || "foto";
 
-    // Destino primário: Google Drive do workspace (conectado via /connectors).
-    // O Supabase Storage segue como fallback enquanto o Drive não estiver
-    // conectado — nenhuma operação de upload fica indisponível na transição.
+    let clienteName: string | null = null;
+    if (typeof clienteIdRaw === "string" && clienteIdRaw.trim()) {
+      const cliente = await prisma.cliente.findFirst({
+        where: { id: clienteIdRaw.trim(), workspaceId: guard.workspaceId },
+        select: { nome: true },
+      });
+      clienteName = cliente?.nome ?? null;
+    }
+
+    // Destino 1: Drive GLOBAL da plataforma (conectado por um W3_ADMIN) —
+    // backup e armazenamento de todos os workspaces. Falha aqui NÃO derruba o
+    // upload: cai para o Drive do workspace e depois Supabase (cadeia de
+    // prioridade global → tenant → fallback).
+    try {
+      const workspace = await prisma.workspace.findUnique({
+        where: { id: guard.workspaceId },
+        select: { name: true, slug: true },
+      });
+      const uploaded = await uploadImageToPlatformDrive({
+        fileName: safeName,
+        mimeType: file.type,
+        bytes: buffer.buffer.slice(
+          buffer.byteOffset,
+          buffer.byteOffset + buffer.byteLength,
+        ),
+        segments: [workspace?.name ?? "geral", clienteName ?? "geral"],
+      });
+      return NextResponse.json({ success: true, url: uploaded.url });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "unknown";
+      console.error(`[api/upload] platform drive unavailable (${message}); falling back`);
+    }
+
+    // Destino 2: Google Drive do próprio workspace (modo legado por tenant).
     const driveAccount = await getActiveDriveAccount(guard.workspaceId);
     if (driveAccount) {
-      let clienteName: string | null = null;
-      if (typeof clienteIdRaw === "string" && clienteIdRaw.trim()) {
-        const cliente = await prisma.cliente.findFirst({
-          where: { id: clienteIdRaw.trim(), workspaceId: guard.workspaceId },
-          select: { nome: true },
-        });
-        clienteName = cliente?.nome ?? null;
-      }
-
       try {
         const uploaded = await uploadImageToWorkspaceDrive({
           workspaceId: guard.workspaceId,

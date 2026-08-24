@@ -77,6 +77,12 @@ export function classifyRateLimitTarget(input: {
     return { keyPrefix: "upload", limit: 120, window: "1 m" };
   }
 
+  if (input.pathname.startsWith("/api/platform-files")) {
+    // Proxy do Drive GLOBAL da plataforma — mesmo custo por hit que /api/files
+    // (chamada à API do Google) e mesmo teto por cliente autenticado.
+    return { keyPrefix: "upload", limit: 120, window: "1 m" };
+  }
+
   if (
     [
       "/api/clientes",

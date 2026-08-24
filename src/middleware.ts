@@ -30,6 +30,7 @@ const rateLimitedRoutes = [
   "/api/ml",
   "/api/upload",
   "/api/files",
+  "/api/platform-files",
   "/api/ai",
   "/api/workspace",
   "/api/observability",

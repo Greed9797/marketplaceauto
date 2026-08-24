@@ -17,6 +17,13 @@ export type ConnectorOAuthStatePayload = {
   nonce: string;
   issuedAt: number;
   shop?: string;
+  /**
+   * Escopo especial assinado no state (não em cookie): "platform" liga o
+   * callback do Google Drive à conexão do Drive GLOBAL da plataforma.
+   * Sobrevive a callbacks cancelados/falhos porque é validado junto com a
+   * assinatura HMAC e expira com o state.
+   */
+  scope?: "platform";
 };
 
 type CreateStateInput = Omit<ConnectorOAuthStatePayload, "issuedAt" | "nonce">;

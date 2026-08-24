@@ -19,6 +19,7 @@ import { getCurrentUserContext } from "@/lib/auth/current";
 import { resolveAppOrigin } from "@/lib/auth/origin";
 import {
   canDeleteWorkspaceConnectors,
+  canManagePlatformUsers,
   canManageProviderConfigs,
   canOperateWorkspaceConnectors,
 } from "@/lib/auth/platform-permissions";
@@ -28,6 +29,7 @@ import {
 } from "@/lib/connectors/marketplace-first";
 import { getGlobalMercadoLivreConfig } from "@/lib/connectors/mercado-livre/global-config";
 import { getGlobalGoogleDriveConfig } from "@/lib/connectors/google-drive/oauth";
+import { getPlatformStorage } from "@/lib/connectors/google-drive/platform";
 import { getGlobalShopeeConfig } from "@/lib/connectors/shopee/global-config";
 import { getMlEnvConfig } from "@/lib/publisher/ml-env-config";
 import { listPublicProviderConfigs } from "@/lib/connectors/provider-config";
@@ -212,11 +214,17 @@ export default async function ConnectorsPage({
   const context = await getCurrentUserContext();
   const params = await searchParams;
   const connectedProvider = firstParam(params.connected);
+  const platformJustConnected = firstParam(params.platform) === "1";
   const message = connectorMessage(
     firstParam(params.error),
     firstParam(params.connected),
     firstParam(params.debug),
   );
+  if (platformJustConnected && message) {
+    message.body =
+      "O Drive global foi conectado. TODOS os uploads do sistema agora vão para a pasta W3 Marketplace no seu Drive.";
+  }
+  const isPlatformAdmin = canManagePlatformUsers(context.user);
   const canConfigureProviders = canManageProviderConfigs(context.user);
   const canConnectAccounts = canOperateWorkspaceConnectors(
     context.user,
@@ -234,7 +242,7 @@ export default async function ConnectorsPage({
 
   // Single connector read (was a redundant groupBy + findMany on the same
   // [workspaceId, provider] index) plus the provider configs in parallel.
-  const [connectorAccounts, configs] = await Promise.all([
+  const [connectorAccounts, configs, platformStorage] = await Promise.all([
     prisma.connectorAccount.findMany({
       // Revoked connectors are soft-deleted: hidden from the connected list and
       // per-provider counts, but their historical orders/metrics are preserved.
@@ -256,6 +264,7 @@ export default async function ConnectorsPage({
       },
     }),
     listPublicProviderConfigs(context.currentWorkspace.id),
+    getPlatformStorage().catch(() => null),
   ]);
 
   // Per-provider counts derived in-process from the single read.
@@ -654,6 +663,30 @@ export default async function ConnectorsPage({
             <p className="font-semibold">{message.title}</p>
             <p className="mt-1">{message.body}</p>
           </div>
+        </div>
+      ) : null}
+
+      {isPlatformAdmin ? (
+        <div className="flex flex-wrap items-center justify-between gap-4 rounded-lg border border-[var(--w3-red)] bg-[color-mix(in_srgb,var(--w3-red)_6%,var(--bg-surface))] px-5 py-4">
+          <div className="min-w-0">
+            <p className="flex items-center gap-2 text-sm font-semibold text-[var(--text-primary)]">
+              <ProviderLogo provider={ConnectorProvider.GOOGLE_DRIVE} className="size-6" />
+              Google Drive — backup e armazenamento do sistema
+            </p>
+            <p className="mt-1 text-sm leading-6 text-[var(--text-secondary)]">
+              {platformStorage
+                ? `Conectado. Todos os uploads de todos os workspaces estão salvos na pasta "${String((platformStorage.metadata as { driveRootFolderName?: string })?.driveRootFolderName ?? "W3 Marketplace")}" no seu Drive.`
+                : "Conecte o seu Drive pessoal uma única vez: TODAS as imagens enviadas por QUALQUER usuário/workspace passam a ser salvas nele, organizadas por cliente."}
+            </p>
+          </div>
+          <Button asChild size="sm">
+            <a
+              href={`/api/connectors/google-drive/connect?scope=platform&ws=${context.currentWorkspace.id}`}
+            >
+              <Cable size={16} aria-hidden="true" />
+              {platformStorage ? "Reconectar Drive global" : "Conectar Drive global"}
+            </a>
+          </Button>
         </div>
       ) : null}
 

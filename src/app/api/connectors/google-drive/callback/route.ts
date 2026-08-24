@@ -10,6 +10,8 @@ import { canOperateWorkspaceConnectors } from "@/lib/auth/platform-permissions";
 import {
   ensureDriveFolder,
 } from "@/lib/connectors/google-drive/client";
+import { connectPlatformStorage } from "@/lib/connectors/google-drive/platform";
+import { canManagePlatformUsers } from "@/lib/auth/platform-permissions";
 import {
   exchangeGoogleDriveCode,
   getGoogleDriveConfigForRequest,
@@ -100,6 +102,43 @@ async function handleCallback(request: NextRequest) {
 
   try {
     const token = await exchangeGoogleDriveCode({ config, code });
+
+    // Modo PLATFORM: o Drive conectado vira o armazenamento GLOBAL do sistema
+    // (backup de todos os workspaces). O escopo vem assinado no state OAuth
+    // (não em cookie) e a checagem de W3_ADMIN é refeita aqui — defesa em
+    // profundidade mesmo que o connect tenha validado o papel.
+    const platformScope = verifiedState.payload.scope === "platform";
+
+    if (platformScope && !canManagePlatformUsers(access.user)) {
+      return redirectToConnectors(request, {
+        provider: "google_drive",
+        error: "forbidden",
+      });
+    }
+
+    if (platformScope) {
+      const { rootFolderId } = await connectPlatformStorage({
+        userId: context.user.id,
+        accessToken: token.accessToken,
+        refreshToken: token.refreshToken,
+        expiresIn: token.expiresIn,
+        scope: token.scope ?? GOOGLE_DRIVE_SCOPE,
+      });
+
+      await logAudit({
+        action: "connector.google_drive.connected",
+        userId: context.user.id,
+        resourceType: "PlatformStorage",
+        resourceId: "platform",
+        metadata: { workspaceId, scope: "platform", driveRootFolderId: rootFolderId },
+      });
+
+      return redirectToConnectors(request, {
+        provider: "google_drive",
+        connected: "1",
+        platform: "1",
+      });
+    }
 
     // Fluxo de workflow de pastas: cria a raiz "W3 Marketplace" no Drive do
     // usuário (idempotente). As imagens ficam organizadas abaixo dela.

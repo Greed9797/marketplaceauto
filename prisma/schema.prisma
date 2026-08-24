@@ -640,6 +640,22 @@ model WorkspaceAiConfig {
   updatedAt   DateTime  @updatedAt
 }
 
+/// Armazenamento global da plataforma (singleton, id fixo "platform").
+/// Conectado por um W3_ADMIN: TODOS os uploads do sistema vão para este
+/// Drive, independente do workspace. Credenciais no Supabase Vault.
+model PlatformStorage {
+  id              String    @id @default("platform")
+  provider        ConnectorProvider @default(GOOGLE_DRIVE)
+  accountLabel    String    @default("Google Drive da plataforma")
+  credentialSecretId        String
+  refreshCredentialSecretId String?
+  tokenExpiresAt            DateTime?
+  metadata                  Json?
+  connectedByUserId         String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
 /// An audit row for a single publish attempt of a `Produto` on one platform.
 /// `respostaApi` stores the raw marketplace response (or error envelope) so the
 /// UI can show diagnostics and the retry endpoint can bump `tentativa`.

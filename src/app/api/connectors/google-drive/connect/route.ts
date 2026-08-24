@@ -2,7 +2,10 @@ import { ConnectorProvider } from "@prisma/client";
 import { NextResponse, type NextRequest } from "next/server";
 
 import { getCurrentUserContext } from "@/lib/auth/current";
-import { canOperateWorkspaceConnectors } from "@/lib/auth/platform-permissions";
+import {
+  canManagePlatformUsers,
+  canOperateWorkspaceConnectors,
+} from "@/lib/auth/platform-permissions";
 import {
   buildGoogleDriveAuthUrl,
   getGoogleDriveConfigForRequest,
@@ -34,8 +37,19 @@ export async function GET(request: NextRequest) {
 async function handleConnect(request: NextRequest) {
   const context = await getCurrentUserContext();
 
+  // Escopo "platform": conecta o Drive GLOBAL da plataforma (backup de todos
+  // os workspaces). Exclusivo de admins da plataforma.
+  const isPlatformScope =
+    request.nextUrl.searchParams.get("scope") === "platform";
+
   if (
     !canOperateWorkspaceConnectors(context.user, context.currentMembership.role)
+  ) {
+    return redirectToConnectors(request, "forbidden");
+  }
+  if (
+    isPlatformScope &&
+    !canManagePlatformUsers(context.user)
   ) {
     return redirectToConnectors(request, "forbidden");
   }
@@ -45,10 +59,14 @@ async function handleConnect(request: NextRequest) {
     return redirectToConnectors(request, "missing-provider-config");
   }
 
+  // O escopo "platform" é ASSINADO no state (HMAC + TTL de 10min), não em
+  // cookie: um cookie órfão sobreviveria a um callback cancelado e poderia
+  // promover uma conexão comum a conexão global num fluxo posterior.
   const state = createConnectorOAuthState({
     provider: "GOOGLE_DRIVE",
     userId: context.user.id,
     workspaceId: context.currentWorkspace.id,
+    ...(isPlatformScope ? { scope: "platform" as const } : {}),
   });
 
   const response = NextResponse.redirect(
