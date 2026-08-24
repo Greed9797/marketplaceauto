@@ -1,5 +1,7 @@
 # Validation Report — roas-anomaly-insights
 
+**Result**: PASS
+
 **Verifier**: independente (autor ≠ verificador)
 **Repo/branch**: W3-Marketplace @ `feat/drive-dashboard-notificacoes`
 **Diff range**: `b306a3f..HEAD` (11 commits, T1–T10 + fix de gaps `627a75c`)
