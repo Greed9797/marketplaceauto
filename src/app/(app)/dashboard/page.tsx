@@ -134,7 +134,7 @@ export default async function DashboardPage({
         >
           <a
             href={statusHref("paid")}
-            aria-pressed={!includeAllStatuses}
+            aria-current={!includeAllStatuses ? "true" : undefined}
             className={cn(
               "px-3 py-1.5 text-sm font-medium transition-colors",
               !includeAllStatuses
@@ -146,7 +146,7 @@ export default async function DashboardPage({
           </a>
           <a
             href={statusHref("all")}
-            aria-pressed={includeAllStatuses}
+            aria-current={includeAllStatuses ? "true" : undefined}
             className={cn(
               "px-3 py-1.5 text-sm font-medium transition-colors",
               includeAllStatuses

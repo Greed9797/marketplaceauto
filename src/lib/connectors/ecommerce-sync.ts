@@ -980,7 +980,6 @@ async function loadOrdersForConnector(input: {
       Number.isFinite(backoffUntil) &&
       Date.now() < backoffUntil
     ) {
-      // eslint-disable-next-line no-console
       console.warn(
         `[ecommerce-sync] iSET auth backoff active until ${new Date(backoffUntil).toISOString()} (connector=${connector.id}); skipping`,
       );

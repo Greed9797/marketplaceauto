@@ -22,6 +22,7 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   outputFileTracingRoot: __dirname,
+  poweredByHeader: false,
   experimental: {
     optimizePackageImports: [
       "recharts",
