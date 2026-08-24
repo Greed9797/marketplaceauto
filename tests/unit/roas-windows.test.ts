@@ -10,7 +10,6 @@ import {
 
 const NOW = new Date("2026-08-24T12:00:00Z");
 const DAY_MS = 24 * 60 * 60 * 1000;
-const HOUR_MS = 60 * 60 * 1000;
 
 describe("computeLaggedWindows", () => {
   it("desloca o corte em exatamente 72 horas (ROAS-05)", () => {

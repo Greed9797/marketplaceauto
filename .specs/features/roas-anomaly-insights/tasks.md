@@ -216,17 +216,17 @@ T10
 ### T7: UI de relatórios com janelas e filtro
 
 **What**: Adicionar seletor 7/30/90d, filtro por plataforma, aviso de histórico parcial e estado vazio ao cliente de relatórios; a página correspondente passa os dados do T6 ao componente.
-**Where**: `src/app/(app)/relatorios/relatorio-client.tsx` (modify)
+**Where**: `src/app/(app)/relatorios/roas-report-card.tsx`
 **Depends on**: T6
 **Reuses**: componentes/tokens visuais existentes do app
 **Requirement**: REPT-01, REPT-02, REPT-03, REPT-04
 
 **Done when**:
 
-- [ ] Renderiza três janelas com totais conferíveis (dados sintéticos no teste)
-- [ ] Aviso parcial aparece quando partialHistory
-- [ ] Estado vazio quando sem dados
-- [ ] Gate check passes: `npx vitest run && npm run lint`
+- [x] Renderiza três janelas com totais conferíveis (dados sintéticos no teste)
+- [x] Aviso parcial aparece quando partialHistory
+- [x] Estado vazio quando sem dados
+- [x] Gate check passes: `npx vitest run && npm run lint`
 
 **Tests**: unit
 **Gate**: full
