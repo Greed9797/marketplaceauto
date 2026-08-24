@@ -133,10 +133,10 @@ um e verificar relatório parcial.
 
 | Requirement ID | Story | Phase | Status |
 | -------------- | ----- | ----- | ------ |
-| KIT-01 | P1: Derivação IA de atributos | - | Pending |
+| KIT-01 | P1: Derivação IA de atributos | T1 | In Progress |
 | KIT-02 | P1: Limiar de confiança 0.7 | - | Pending |
 | KIT-03 | P1: Falha de IA não bloqueia lote | - | Pending |
-| KIT-04 | P1: Override manual permanente | - | Pending |
+| KIT-04 | P1: Override manual permanente | T1 | In Progress |
 | KIT-05 | P1: Lote ≤50 com retomada | - | Pending |
 | KIT-06 | P1: Camada 1 gênero+idade | - | Pending |
 | KIT-07 | P1: Homogêneos e matriz de pares | - | Pending |
@@ -146,7 +146,7 @@ um e verificar relatório parcial.
 | KIT-11 | P1: Preferência cor distinta | - | Pending |
 | KIT-12 | P1: Priorização giro alto+lento | - | Pending |
 | KIT-13 | P1: Aprovação persiste kit | - | Pending |
-| KIT-14 | P1: Rejeição impede reproposta | - | Pending |
+| KIT-14 | P1: Rejeição impede reproposta | T1 | In Progress |
 | KIT-15 | P1: Bloqueio por estoque | - | Pending |
 | KIT-16 | P1: Lista com status/filtros | - | Pending |
 | KPUB-01 | P2: Publicação em lote Shopee | - | Pending |

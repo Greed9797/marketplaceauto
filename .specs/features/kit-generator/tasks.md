@@ -78,6 +78,8 @@ T10 → T11
 
 ### T1: Modelos de dados do kit
 
+**Status**: Complete
+
 **What**: Adicionar `ProductClassification`, `ComplementaryPair`, `KitProposal`, `Kit` ao schema + migration idempotente.
 **Where**: `prisma/schema.prisma` (+ diretório de migration correspondente)
 **Depends on**: None
@@ -86,9 +88,9 @@ T10 → T11
 
 **Done when**:
 
-- [ ] `npx prisma validate` OK; client gerado; migration sem destructive
-- [ ] Unique em ProductClassification.produtoId e KitProposal.comboHash
-- [ ] Gate check passes: Full + `npx next build`
+- [x] `npx prisma validate` OK; client gerado; migration sem destructive
+- [x] Unique em ProductClassification.produtoId e KitProposal.comboHash
+- [x] Gate check passes: Full + `npx next build`
 
 **Tests**: none
 **Gate**: build

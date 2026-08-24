@@ -579,9 +579,9 @@ enum PublisherPlatform {
 /// OAuth connections (Shopee / Mercado Livre) attach to a Cliente so a single
 /// workspace can publish on behalf of many clients.
 model Cliente {
-  id                 String              @id @default(cuid())
+  id                 String             @id @default(cuid())
   workspaceId        String
-  workspace          Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspace          Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   nome               String
   nicho              String?
   estiloDescricao    String?
@@ -590,12 +590,14 @@ model Cliente {
   dadosFiscais       String?
   /// Percentual de comissão da agência sobre o faturamento deste cliente
   /// (ex.: 5.00 = 5%). Usado no relatório consolidado. Null = 0% (sem comissão).
-  comissaoPercent    Decimal?            @db.Decimal(5, 2)
-  ativo              Boolean             @default(true)
-  createdAt          DateTime            @default(now())
-  updatedAt          DateTime            @updatedAt
+  comissaoPercent    Decimal?           @db.Decimal(5, 2)
+  ativo              Boolean            @default(true)
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
   connectorAccounts  ConnectorAccount[]
   produtos           Produto[]
+  kitProposals       KitProposal[]
+  kits               Kit[]
 
   @@index([workspaceId])
 }
@@ -606,39 +608,106 @@ model Cliente {
 /// `add_item` / `items.create`. `status` is a plain string state machine:
 /// rascunho | pendente | publicando | publicado | erro.
 model Produto {
-  id                String       @id @default(cuid())
+  id                String                 @id @default(cuid())
   clienteId         String
-  cliente           Cliente      @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  cliente           Cliente                @relation(fields: [clienteId], references: [id], onDelete: Cascade)
   nomeOriginal      String
   fotoUrl           String?
   /// Galeria de imagens (capa = fotoUrl ou imagens[0]). URLs remotas do
   /// marketplace (importadas) ou públicas do bucket `produtos` (upload/IA).
-  imagens           String[]     @default([])
-  status            String       @default("rascunho")
+  imagens           String[]               @default([])
+  status            String                 @default("rascunho")
   /// Score de qualidade do anúncio 0-100 (listing-score.ts, determinístico).
   score             Int?
   /// Detalhamento por critério do score: [{criterio, pontos, max, dica}].
   scoreBreakdown    Json?
   /// Origem do produto: manual | importado_ml | importado_shopee.
-  origem            String       @default("manual")
+  origem            String                 @default("manual")
   tituloMl          String?
   tituloShopee      String?
   descricao         String?
   categoriaMlId     String?
   categoriaShopeeId Int?
-  preco             Decimal      @db.Decimal(14, 2)
-  quantidade        Int          @default(1)
-  condicao          String       @default("not_specified")
+  preco             Decimal                @db.Decimal(14, 2)
+  quantidade        Int                    @default(1)
+  condicao          String                 @default("not_specified")
   atributos         Json?
   payloadMl         Json?
   payloadShopee     Json?
   mlItemId          String?
   shopeeItemId      String?
-  createdAt         DateTime     @default(now())
-  updatedAt         DateTime     @updatedAt
+  createdAt         DateTime               @default(now())
+  updatedAt         DateTime               @updatedAt
   publicacoes       Publicacao[]
+  classification    ProductClassification?
 
   @@index([clienteId])
+}
+
+/// Normalized product attributes used by the kit compatibility engine.
+/// Manual classifications are preserved by the classification service.
+model ProductClassification {
+  id           String    @id @default(cuid())
+  produtoId    String    @unique
+  produto      Produto   @relation(fields: [produtoId], references: [id], onDelete: Cascade)
+  gender       String
+  ageBand      String
+  categoryKey  String
+  colorPattern String?
+  confidence   Float
+  source       String    @default("ai")
+  needsReview  Boolean   @default(false)
+  reviewedAt   DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([needsReview])
+}
+
+/// Approved category combinations. Identical-category kits do not need a row.
+model ComplementaryPair {
+  id        String   @id @default(cuid())
+  categoryA String
+  categoryB String
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([categoryA, categoryB])
+  @@index([active])
+}
+
+/// A generated combination awaiting an explicit human decision.
+model KitProposal {
+  id            String   @id @default(cuid())
+  clienteId     String
+  cliente       Cliente  @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  componentIds  String[] @default([])
+  reason        String
+  comboHash     String   @unique
+  monochromatic Boolean  @default(false)
+  status        String   @default("proposta")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  kit           Kit?
+
+  @@index([clienteId, status])
+}
+
+/// A proposal approved by a human, with its manager-defined final price.
+model Kit {
+  id           String      @id @default(cuid())
+  proposalId   String      @unique
+  proposal     KitProposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+  clienteId    String
+  cliente      Cliente     @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  price        Decimal     @db.Decimal(14, 2)
+  status       String      @default("aprovado")
+  shopeeItemId String?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  @@index([clienteId, status])
 }
 
 /// Config de IA BYOK por workspace: o OWNER/ADMIN cadastra a própria chave
