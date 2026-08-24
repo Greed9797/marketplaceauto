@@ -103,6 +103,22 @@ describe("detectRoasDrops", () => {
     expect(drafts).toHaveLength(0);
   });
 
+  it("ignora campanha cuja razao fica em 50% ou mais", async () => {
+    // Baseline ROAS 10; recente ROAS 6 -> razão 0.6 >= limite de alerta.
+    prismaMocks.dailyMetric.groupBy
+      .mockResolvedValueOnce([metricRow({})])
+      .mockResolvedValueOnce([
+        metricRow({ _sum: { spend: 30, revenue: 180 } }),
+      ])
+      .mockResolvedValueOnce([
+        metricRow({ _sum: { spend: 100, revenue: 1000 } }),
+      ]);
+
+    const drafts = await detectRoasDrops("ws-1");
+
+    expect(drafts).toHaveLength(0);
+  });
+
   it("escalates to critical on an almost total collapse", async () => {
     prismaMocks.dailyMetric.groupBy
       .mockResolvedValueOnce([metricRow({})])
@@ -188,6 +204,20 @@ describe("detectLowStock", () => {
     const drafts = await detectLowStock("ws-1");
 
     expect(drafts).toHaveLength(0);
+  });
+
+  it("so considera produtos publicados na consulta (STCK-03)", async () => {
+    prismaMocks.produto.findMany.mockResolvedValue([]);
+
+    await detectLowStock("ws-1");
+
+    // Estoque fantasma: anúncio pausado manualmente não pode alertar — o
+    // filtro de status é a fronteira desta camada.
+    expect(prismaMocks.produto.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ status: "publicado" }),
+      }),
+    );
   });
 
   it("inclui o runway em dias quando ha vendas na janela (STCK-02)", async () => {
