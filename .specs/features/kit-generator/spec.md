@@ -133,11 +133,11 @@ um e verificar relatório parcial.
 
 | Requirement ID | Story | Phase | Status |
 | -------------- | ----- | ----- | ------ |
-| KIT-01 | P1: Derivação IA de atributos | T1-T2 | In Progress |
-| KIT-02 | P1: Limiar de confiança 0.7 | - | Pending |
-| KIT-03 | P1: Falha de IA não bloqueia lote | - | Pending |
-| KIT-04 | P1: Override manual permanente | T1 | In Progress |
-| KIT-05 | P1: Lote ≤50 com retomada | - | Pending |
+| KIT-01 | P1: Derivação IA de atributos | T1-T3 | Complete |
+| KIT-02 | P1: Limiar de confiança 0.7 | T3 | Complete |
+| KIT-03 | P1: Falha de IA não bloqueia lote | T3 | In Progress |
+| KIT-04 | P1: Override manual permanente | T1, T3 | Complete |
+| KIT-05 | P1: Lote ≤50 com retomada | T3 | In Progress |
 | KIT-06 | P1: Camada 1 gênero+idade | - | Pending |
 | KIT-07 | P1: Homogêneos e matriz de pares | - | Pending |
 | KIT-08 | P1: Trava de estoque ≥2 | - | Pending |

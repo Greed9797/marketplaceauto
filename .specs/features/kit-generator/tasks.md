@@ -125,6 +125,8 @@ T10 → T11
 
 ### T3: Serviço de classificação IA
 
+**Status**: Complete
+
 **What**: Implementar `classifyProduto`/`classifyBatch`: prompt estruturado, Zod do contrato de atributos, confiança <0.7 → needsReview, falha de IA não interrompe o lote, pulo de itens com `source=manual`.
 **Where**: `src/lib/kits/classify.ts`
 **Depends on**: T1, T2
@@ -133,9 +135,9 @@ T10 → T11
 
 **Done when**:
 
-- [ ] Unit tests com Gemini mockado: feliz, baixa confiança, erro de rede, override manual preservado
-- [ ] Lote ≤50 com retomada determinística testado
-- [ ] Gate check passes: `npx vitest run`
+- [x] Unit tests com Gemini mockado: feliz, baixa confiança, erro de rede, override manual preservado
+- [x] Lote ≤50 com retomada determinística testado
+- [x] Gate check passes: `npx vitest run`
 
 **Tests**: unit
 **Gate**: quick
