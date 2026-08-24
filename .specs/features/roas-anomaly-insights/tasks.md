@@ -160,8 +160,8 @@ T10
 
 **Done when**:
 
-- [ ] Casos: média >0, média 0, null — todos com teste
-- [ ] Gate check passes: `npx vitest run`
+- [x] Casos: média >0, média 0, null — todos com teste
+- [x] Gate check passes: `npx vitest run`
 
 **Tests**: unit
 **Gate**: quick
