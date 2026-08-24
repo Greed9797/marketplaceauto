@@ -59,6 +59,11 @@ type ApiResult<T> =
   | { success: true; data: T }
   | { success: false; error: string };
 
+type PublishReport = {
+  publicado: number;
+  erros: { kitId: string; error: string }[];
+};
+
 const statusPresentation: Record<
   ProposalStatus,
   { label: string; tone: NonNullable<BadgeProps["tone"]> }
@@ -79,6 +84,10 @@ function formatPrice(value: number) {
     style: "currency",
     currency: "BRL",
   }).format(value);
+}
+
+function formatCount(count: number, singular: string, plural: string) {
+  return `${count} ${count === 1 ? singular : plural}`;
 }
 
 async function readApi<T>(response: Response): Promise<T> {
@@ -113,6 +122,9 @@ export function KitsClient() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [busyId, setBusyId] = useState<string | null>(null);
   const [classifying, setClassifying] = useState(false);
+  const [selectedKitIds, setSelectedKitIds] = useState<string[]>([]);
+  const [publishing, setPublishing] = useState(false);
+  const [publishReport, setPublishReport] = useState<PublishReport | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -326,6 +338,63 @@ export function KitsClient() {
     }
   }
 
+  async function publishSelected() {
+    if (selectedKitIds.length === 0) return;
+
+    setPublishing(true);
+    setError(null);
+    setNotice(null);
+    setPublishReport(null);
+    try {
+      const data = await readApi<PublishReport>(
+        await fetch("/api/kits/publish", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ kitIds: selectedKitIds }),
+        }),
+      );
+      const errorByKit = new Map(
+        data.erros.map((publishError) => [publishError.kitId, publishError.error]),
+      );
+      setProposals((current) =>
+        current?.map((proposal) => {
+          if (!proposal.kit || !selectedKitIds.includes(proposal.kit.id)) {
+            return proposal;
+          }
+          const publishError = errorByKit.get(proposal.kit.id);
+          const status: ProposalStatus = publishError
+            ? publishError === "Estoque insuficiente."
+              ? "bloqueado"
+              : "erro"
+            : "publicado";
+          return {
+            ...proposal,
+            status,
+            kit: { ...proposal.kit, status },
+          };
+        }) ?? [],
+      );
+      setPublishReport(data);
+      setSelectedKitIds([]);
+    } catch (publishError: unknown) {
+      setError(
+        publishError instanceof Error
+          ? publishError.message
+          : "Não foi possível publicar os kits selecionados.",
+      );
+    } finally {
+      setPublishing(false);
+    }
+  }
+
+  function toggleKitSelection(kitId: string) {
+    setSelectedKitIds((current) =>
+      current.includes(kitId)
+        ? current.filter((selectedId) => selectedId !== kitId)
+        : [...current, kitId],
+    );
+  }
+
   function updateDraft(
     produtoId: string,
     field: keyof ClassificationDraft,
@@ -536,17 +605,57 @@ export function KitsClient() {
       </section>
 
       <section aria-labelledby="kit-list-title" className="space-y-4">
-        <div>
-          <h2
-            id="kit-list-title"
-            className="text-base font-semibold text-[var(--text-primary)]"
-          >
-            Propostas e kits
-          </h2>
-          <p className="mt-1 text-sm text-[var(--text-secondary)]">
-            Compatibilidade, motivo e preço reunidos para uma decisão rápida.
-          </p>
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h2
+              id="kit-list-title"
+              className="text-base font-semibold text-[var(--text-primary)]"
+            >
+              Propostas e kits
+            </h2>
+            <p className="mt-1 text-sm text-[var(--text-secondary)]">
+              Compatibilidade, motivo e preço reunidos para uma decisão rápida.
+            </p>
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="text-xs text-[var(--text-tertiary)] [font-variant-numeric:tabular-nums]">
+              {formatCount(
+                selectedKitIds.length,
+                "selecionado",
+                "selecionados",
+              )}
+            </span>
+            <Button
+              size="sm"
+              onClick={publishSelected}
+              disabled={selectedKitIds.length === 0 || publishing}
+            >
+              {publishing ? "Publicando…" : "Publicar selecionados"}
+            </Button>
+          </div>
         </div>
+
+        {publishReport ? (
+          <div
+            role="status"
+            aria-label="Relatório de publicação"
+            className="rounded-[var(--radius-lg)] bg-[var(--bg-elevated)] px-4 py-3 text-sm text-[var(--text-primary)]"
+          >
+            <p>
+              {formatCount(publishReport.publicado, "publicado", "publicados")},{" "}
+              {formatCount(publishReport.erros.length, "erro", "erros")}.
+            </p>
+            {publishReport.erros.length > 0 ? (
+              <ul className="mt-2 space-y-1 text-[var(--danger)]">
+                {publishReport.erros.map((publishError) => (
+                  <li key={publishError.kitId}>
+                    {publishError.kitId}: {publishError.error}
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+          </div>
+        ) : null}
 
         {loading ? (
           <div className="space-y-2" aria-busy="true">
@@ -571,6 +680,10 @@ export function KitsClient() {
           <ul className="divide-y divide-[var(--border-subtle)] overflow-hidden rounded-[var(--radius-lg)] border border-[var(--border-subtle)] bg-[var(--bg-surface)]">
             {visibleProposals.map((proposal) => {
               const presentation = statusPresentation[proposal.status];
+              const canPublish =
+                proposal.status === "aprovado" &&
+                Boolean(proposal.kit?.produtoId) &&
+                !proposal.kit?.categoryPending;
               return (
                 <li key={proposal.id} className="p-4 sm:p-5">
                   <div className="flex flex-wrap items-start justify-between gap-4">
@@ -602,6 +715,19 @@ export function KitsClient() {
                     </div>
 
                     <div className="w-full space-y-3 sm:w-56">
+                      {canPublish && proposal.kit ? (
+                        <label className="flex items-center gap-2 text-xs font-medium text-[var(--text-secondary)]">
+                          <input
+                            type="checkbox"
+                            aria-label={`Selecionar kit ${proposal.kit.id}`}
+                            checked={selectedKitIds.includes(proposal.kit.id)}
+                            disabled={publishing}
+                            onChange={() => toggleKitSelection(proposal.kit!.id)}
+                            className="size-4 accent-[var(--w3-red)]"
+                          />
+                          Selecionar para publicar
+                        </label>
+                      ) : null}
                       <Input
                         label={
                           proposal.status === "proposta"

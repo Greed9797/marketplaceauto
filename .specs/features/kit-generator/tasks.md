@@ -333,6 +333,8 @@ T8 → T9
 
 ### T12: Botão publicar em lote na UI (P2)
 
+**Status**: Complete
+
 **What**: Adicionar seleção múltipla e botão "Publicar selecionados" na lista de kits aprovados com relatório parcial pós-ação.
 **Where**: `src/app/(app)/kits/kits-client.tsx` (modify)
 **Depends on**: T8, T11
@@ -341,8 +343,8 @@ T8 → T9
 
 **Done when**:
 
-- [ ] Component test: seleção + relatório parcial exibido
-- [ ] Gate check passes: `npx vitest run && npm run lint`
+- [x] Component test: seleção + relatório parcial exibido
+- [x] Gate check passes: `npx vitest run && npm run lint`
 
 **Tests**: unit
 **Gate**: full

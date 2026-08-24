@@ -19,6 +19,7 @@ function proposal(input: {
   status: string;
   clienteId?: string;
   clienteNome?: string;
+  categoryPending?: boolean;
 }) {
   const clienteId = input.clienteId ?? "client-1";
   return {
@@ -42,7 +43,7 @@ function proposal(input: {
             status: input.status,
             price: 109.9,
             produtoId: `derived-${input.id}`,
-            categoryPending: true,
+            categoryPending: input.categoryPending ?? false,
           },
   };
 }
@@ -66,6 +67,10 @@ const review = {
 function mockApi(input: {
   proposals?: ReturnType<typeof proposal>[];
   classifications?: (typeof review)[];
+  publishResult?: {
+    publicado: number;
+    erros: { kitId: string; error: string }[];
+  };
 }) {
   const proposals = input.proposals ?? [];
   const classifications = input.classifications ?? [];
@@ -121,6 +126,12 @@ function mockApi(input: {
         data: { processed: 3, needsReview: 1, failures: 0 },
       });
     }
+    if (url === "/api/kits/publish" && init?.method === "POST") {
+      return response({
+        success: true,
+        data: input.publishResult ?? { publicado: 0, erros: [] },
+      });
+    }
     return response({ success: false, error: "not mocked" }, 500);
   });
 }
@@ -160,7 +171,15 @@ describe("KitsClient", () => {
   });
 
   it("liga o Kit aprovado ao editor do Produto derivado (KIT-13)", async () => {
-    mockApi({ proposals: [proposal({ id: "proposal-1", status: "aprovado" })] });
+    mockApi({
+      proposals: [
+        proposal({
+          id: "proposal-1",
+          status: "aprovado",
+          categoryPending: true,
+        }),
+      ],
+    });
 
     render(<KitsClient />);
 
@@ -286,5 +305,53 @@ describe("KitsClient", () => {
         expect.objectContaining({ method: "POST" }),
       ),
     );
+  });
+
+  it("publica kits selecionados e mostra relatorio parcial (KPUB-01, KPUB-02)", async () => {
+    mockApi({
+      proposals: [
+        proposal({ id: "proposal-1", status: "aprovado" }),
+        proposal({ id: "proposal-2", status: "aprovado" }),
+        proposal({ id: "proposal-3", status: "proposta" }),
+        proposal({
+          id: "proposal-4",
+          status: "aprovado",
+          categoryPending: true,
+        }),
+      ],
+      publishResult: {
+        publicado: 1,
+        erros: [
+          { kitId: "kit-proposal-2", error: "Estoque insuficiente." },
+        ],
+      },
+    });
+
+    render(<KitsClient />);
+
+    const publishButton = await screen.findByRole("button", {
+      name: "Publicar selecionados",
+    });
+    expect(publishButton).toBeDisabled();
+    const selections = screen.getAllByRole("checkbox", {
+      name: /Selecionar kit/,
+    });
+    expect(selections).toHaveLength(2);
+    fireEvent.click(selections[0]!);
+    fireEvent.click(selections[1]!);
+    fireEvent.click(publishButton);
+
+    expect(
+      await screen.findByRole("status", { name: "Relatório de publicação" }),
+    ).toHaveTextContent("1 publicado, 1 erro.");
+    expect(screen.getByText("kit-proposal-2: Estoque insuficiente.")).toBeInTheDocument();
+    expect(screen.getByText("Publicado", { selector: "span" })).toBeInTheDocument();
+    expect(screen.getByText("Bloqueado", { selector: "span" })).toBeInTheDocument();
+    const publishCall = fetchMock.mock.calls.find(
+      ([url, init]) => url === "/api/kits/publish" && init?.method === "POST",
+    );
+    expect(JSON.parse(String(publishCall?.[1]?.body))).toEqual({
+      kitIds: ["kit-proposal-1", "kit-proposal-2"],
+    });
   });
 });
