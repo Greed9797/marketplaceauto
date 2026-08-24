@@ -1,8 +1,8 @@
-import { ConnectorProvider } from "@prisma/client";
 import { NextResponse, type NextRequest } from "next/server";
 
 import { RETRYABLE_CONNECTOR_STATUSES } from "@/lib/connectors/sync-error";
 import {
+  KEEPALIVE_PROVIDERS,
   KEEPALIVE_SKEW_MS,
   keepAliveRefreshConnector,
   type KeepAliveResult,
@@ -45,9 +45,7 @@ export async function GET(request: NextRequest) {
       // ERROR is retryable (transient failures keep the grant alive) — keep the
       // token warm so the retried sync can succeed instead of dying on expiry.
       status: { in: [...RETRYABLE_CONNECTOR_STATUSES] },
-      provider: {
-        in: [ConnectorProvider.MERCADO_LIVRE, ConnectorProvider.SHOPEE],
-      },
+      provider: { in: [...KEEPALIVE_PROVIDERS] },
       tokenExpiresAt: { not: null, lte: dueBefore },
     },
     orderBy: { tokenExpiresAt: "asc" },
@@ -81,9 +79,21 @@ export async function GET(request: NextRequest) {
     }
   }
 
+  // Retenção: SyncJob cresce um registro por conector por sync e ninguém lê
+  // histórico antigo; sem poda vira dezenas de milhares de linhas por ano.
+  const [syncJobsDeleted, auditLogsDeleted] = await Promise.all([
+    prisma.syncJob.deleteMany({
+      where: { startedAt: { lt: new Date(Date.now() - 180 * 86_400_000) } },
+    }),
+    prisma.auditLog.deleteMany({
+      where: { createdAt: { lt: new Date(Date.now() - 730 * 86_400_000) } },
+    }),
+  ]);
+
   return NextResponse.json({
     ok: true,
     processed: connectors.length,
     ...tally,
+    retention: { syncJobsDeleted: syncJobsDeleted.count, auditLogsDeleted: auditLogsDeleted.count },
   });
 }

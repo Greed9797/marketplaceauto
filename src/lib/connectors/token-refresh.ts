@@ -15,10 +15,14 @@ import {
   refreshGoogleDriveAccessToken,
 } from "@/lib/connectors/google-drive/oauth";
 import {
+  buildGoogleAdsConfigFromProviderConfig,
+  buildGoogleAnalyticsConfigFromProviderConfig,
   buildMercadoLivreConfigFromProviderConfig,
   buildShopeeConfigFromProviderConfig,
   getActiveProviderConfig,
 } from "@/lib/connectors/provider-config";
+import { GoogleAdsClient } from "@/lib/connectors/google-ads/client";
+import { GoogleAnalyticsClient } from "@/lib/connectors/google-analytics/client";
 import { ShopeeClient } from "@/lib/connectors/shopee/client";
 import { getGlobalShopeeConfig } from "@/lib/connectors/shopee/global-config";
 import {
@@ -47,11 +51,21 @@ export type KeepAliveResult =
   | "transient_error"
   | "unsupported";
 
-const SUPPORTED = new Set<ConnectorProvider>([
+/**
+ * Providers com grant de refresh renovável. O keepalive precisa exercitar o
+ * refresh token com frequência — Google revoga grants de apps em modo Teste
+ * após 7 dias sem uso, e a frota inteira apodreceu por falta disso.
+ * META_ADS fica fora de propósito: token long-lived não é renovável.
+ */
+export const KEEPALIVE_PROVIDERS = [
   ConnectorProvider.MERCADO_LIVRE,
   ConnectorProvider.SHOPEE,
   ConnectorProvider.GOOGLE_DRIVE,
-]);
+  ConnectorProvider.GOOGLE_ADS,
+  ConnectorProvider.GA4,
+] as const;
+
+const SUPPORTED = new Set<ConnectorProvider>(KEEPALIVE_PROVIDERS);
 
 async function markTokenExpired(connectorId: string, message: string) {
   await prisma.connectorAccount.update({
@@ -150,6 +164,38 @@ export async function keepAliveRefreshConnector(
         // Google não rotaciona o refresh token num grant de refresh.
         refreshToken: refreshToken,
         expiresIn: refreshed.expiresIn,
+      });
+      return "refreshed";
+    }
+
+    if (
+      connector.provider === ConnectorProvider.GOOGLE_ADS ||
+      connector.provider === ConnectorProvider.GA4
+    ) {
+      const providerConfig = await getActiveProviderConfig({
+        workspaceId: connector.workspaceId,
+        provider: connector.provider,
+      });
+      if (!providerConfig) return "skipped";
+
+      const refreshed =
+        connector.provider === ConnectorProvider.GOOGLE_ADS
+          ? await new GoogleAdsClient({
+              config: await buildGoogleAdsConfigFromProviderConfig(
+                providerConfig,
+              ),
+            }).refreshAccessToken(refreshToken)
+          : await new GoogleAnalyticsClient({
+              config: await buildGoogleAnalyticsConfigFromProviderConfig(
+                providerConfig,
+              ),
+            }).refreshAccessToken(refreshToken);
+
+      await persistRefreshed({
+        connector,
+        accessToken: refreshed.access_token,
+        refreshToken: refreshed.refresh_token ?? refreshToken,
+        expiresIn: Number(refreshed.expires_in ?? 3600),
       });
       return "refreshed";
     }
