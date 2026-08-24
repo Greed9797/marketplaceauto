@@ -1,28 +1,34 @@
 import { ConnectorProvider, ConnectorStatus } from "@prisma/client";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { prismaMocks, txMocks } = vi.hoisted(() => ({
-  prismaMocks: {
-    $transaction: vi.fn(),
-    notification: {
-      findFirst: vi.fn(),
-      create: vi.fn(),
+const { prismaMocks, txMocks, detectShopeeAccountRoasDropMock } = vi.hoisted(
+  () => ({
+    prismaMocks: {
+      $transaction: vi.fn(),
+      notification: {
+        findFirst: vi.fn(),
+        create: vi.fn(),
+      },
+      dailyMetric: { groupBy: vi.fn() },
+      produto: { findMany: vi.fn() },
+      productInventory: { findMany: vi.fn() },
+      connectorAccount: { findMany: vi.fn() },
     },
-    dailyMetric: { groupBy: vi.fn() },
-    produto: { findMany: vi.fn() },
-    productInventory: { findMany: vi.fn() },
-    connectorAccount: { findMany: vi.fn() },
-  },
-  txMocks: {
-    $executeRaw: vi.fn(),
-    notification: {
-      findFirst: vi.fn(),
-      create: vi.fn(),
+    txMocks: {
+      $executeRaw: vi.fn(),
+      notification: {
+        findFirst: vi.fn(),
+        create: vi.fn(),
+      },
     },
-  },
-}));
+    detectShopeeAccountRoasDropMock: vi.fn(),
+  }),
+);
 
 vi.mock("@/lib/db/prisma", () => ({ prisma: prismaMocks }));
+vi.mock("@/lib/notifications/shopee-account-rule", () => ({
+  detectShopeeAccountRoasDrop: detectShopeeAccountRoasDropMock,
+}));
 
 import {
   detectAccountQualityIssues,
@@ -51,6 +57,7 @@ beforeEach(() => {
   txMocks.$executeRaw.mockResolvedValue([]);
   txMocks.notification.findFirst.mockResolvedValue(null);
   txMocks.notification.create.mockResolvedValue({});
+  detectShopeeAccountRoasDropMock.mockResolvedValue([]);
 });
 
 describe("detectRoasDrops", () => {
@@ -231,5 +238,69 @@ describe("evaluateWorkspaceNotificationRules", () => {
 
     expect(created).toBe(0);
     expect(prismaMocks.notification.create).not.toHaveBeenCalled();
+  });
+
+  it("persiste o alerta de conta Shopee e herda o cooldown de 24h", async () => {
+    prismaMocks.dailyMetric.groupBy.mockResolvedValue([]);
+    prismaMocks.produto.findMany.mockResolvedValue([]);
+    prismaMocks.connectorAccount.findMany.mockResolvedValue([]);
+
+    detectShopeeAccountRoasDropMock.mockResolvedValue([
+      {
+        type: "roas_drop",
+        severity: "warning",
+        title: 'Queda de ROAS na conta "Loja"',
+        entityType: "connector_account",
+        entityId: "acc-shopee-1",
+        metadata: { scope: "account" },
+      },
+    ]);
+    txMocks.notification.create.mockResolvedValue({});
+
+    const created = await evaluateWorkspaceNotificationRules("ws-1");
+
+    expect(created).toBe(1);
+    expect(txMocks.notification.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          type: "roas_drop",
+          entityType: "connector_account",
+          entityId: "acc-shopee-1",
+        }),
+      }),
+    );
+
+    // Segunda rodada dentro da janela de cooldown -> nada novo (ROAS-06).
+    // O cooldown é lido em prisma (fora da tx) pelo isOnCooldown atual.
+    prismaMocks.notification.findFirst.mockResolvedValueOnce({
+      id: "recent",
+    });
+    const second = await evaluateWorkspaceNotificationRules("ws-1");
+    expect(second).toBe(0);
+  });
+
+  it("nao derruba as demais regras quando a regra de conta falha", async () => {
+    const consoleError = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    try {
+      prismaMocks.dailyMetric.groupBy.mockResolvedValue([]);
+      prismaMocks.produto.findMany.mockResolvedValue([]);
+      prismaMocks.connectorAccount.findMany.mockResolvedValue([]);
+      detectShopeeAccountRoasDropMock.mockRejectedValue(
+        new Error("shopee exploded"),
+      );
+      txMocks.notification.create.mockResolvedValue({});
+
+      await expect(evaluateWorkspaceNotificationRules("ws-1")).resolves.toBe(0);
+
+      // Regra isolada: as outras rodaram e o erro foi logado.
+      expect(txMocks.notification.create).not.toHaveBeenCalled();
+      expect(consoleError).toHaveBeenCalledWith(
+        expect.stringContaining("shopee account rule failed"),
+      );
+    } finally {
+      consoleError.mockRestore();
+    }
   });
 });

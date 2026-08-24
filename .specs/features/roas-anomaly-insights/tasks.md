@@ -135,10 +135,10 @@ T10
 
 **Done when**:
 
-- [ ] Duas execuções seguidas criam 1 notificação apenas (teste de cooldown)
-- [ ] Falha da regra não derruba as demais (teste de catch)
-- [ ] Test count cresce sem deletar testes existentes
-- [ ] Gate check passes: `npx vitest run`
+- [x] Duas execuções seguidas criam 1 notificação apenas (teste de cooldown)
+- [x] Falha da regra não derruba as demais (teste de catch)
+- [x] Test count cresce sem deletar testes existentes
+- [x] Gate check passes: `npx vitest run`
 
 **Tests**: unit
 **Gate**: quick

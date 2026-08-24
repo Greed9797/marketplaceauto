@@ -1,6 +1,7 @@
 import { ConnectorProvider, ConnectorStatus, type Prisma } from "@prisma/client";
 
 import { prisma } from "@/lib/db/prisma";
+import { detectShopeeAccountRoasDrop } from "@/lib/notifications/shopee-account-rule";
 
 export type NotificationSeverity = "info" | "warning" | "critical";
 
@@ -356,30 +357,40 @@ export async function detectAccountQualityIssues(
 export async function evaluateWorkspaceNotificationRules(
   workspaceId: string,
 ): Promise<number> {
-  const [roasDrafts, stockDrafts, accountDrafts] = await Promise.all([
-    detectRoasDrops(workspaceId).catch((error: unknown) => {
-      console.error(
-        `[notifications] roas rule failed: ${error instanceof Error ? error.message : "unknown"}`,
-      );
-      return [] as NotificationDraft[];
-    }),
-    detectLowStock(workspaceId).catch((error: unknown) => {
-      console.error(
-        `[notifications] stock rule failed: ${error instanceof Error ? error.message : "unknown"}`,
-      );
-      return [] as NotificationDraft[];
-    }),
-    detectAccountQualityIssues(workspaceId).catch((error: unknown) => {
-      console.error(
-        `[notifications] account rule failed: ${error instanceof Error ? error.message : "unknown"}`,
-      );
-      return [] as NotificationDraft[];
-    }),
-  ]);
+  const [roasDrafts, stockDrafts, accountDrafts, shopeeAccountDrafts] =
+    await Promise.all([
+      detectRoasDrops(workspaceId).catch((error: unknown) => {
+        console.error(
+          `[notifications] roas rule failed: ${error instanceof Error ? error.message : "unknown"}`,
+        );
+        return [] as NotificationDraft[];
+      }),
+      detectLowStock(workspaceId).catch((error: unknown) => {
+        console.error(
+          `[notifications] stock rule failed: ${error instanceof Error ? error.message : "unknown"}`,
+        );
+        return [] as NotificationDraft[];
+      }),
+      detectAccountQualityIssues(workspaceId).catch((error: unknown) => {
+        console.error(
+          `[notifications] account rule failed: ${error instanceof Error ? error.message : "unknown"}`,
+        );
+        return [] as NotificationDraft[];
+      }),
+      // Regra de nível CONTA para Shopee Ads — o endpoint atual não expõe
+      // campanha (ver design.md). Mesmo contrato de drafts/dedup das demais.
+      detectShopeeAccountRoasDrop(workspaceId).catch((error: unknown) => {
+        console.error(
+          `[notifications] shopee account rule failed: ${error instanceof Error ? error.message : "unknown"}`,
+        );
+        return [] as NotificationDraft[];
+      }),
+    ]);
 
   return persistDrafts(workspaceId, [
     ...roasDrafts,
     ...stockDrafts,
     ...accountDrafts,
+    ...shopeeAccountDrafts,
   ]);
 }
