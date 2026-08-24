@@ -178,10 +178,10 @@ T10
 
 **Done when**:
 
-- [ ] Produto publicado c/ estoque 4 e 2/dia → corpo traz "≈2 dias"
-- [ ] Sem pedidos → alerta segue sem runway
-- [ ] Status ≠ publicado não alerta (teste novo)
-- [ ] Gate check passes: `npx vitest run && npm run typecheck`
+- [x] Produto publicado c/ estoque 4 e 2/dia → corpo traz "≈2 dias"
+- [x] Sem pedidos → alerta segue sem runway
+- [x] Status ≠ publicado não alerta (teste novo)
+- [x] Gate check passes: `npx vitest run && npm run typecheck`
 
 **Tests**: unit
 **Gate**: quick

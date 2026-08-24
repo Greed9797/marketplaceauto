@@ -13,6 +13,7 @@ const { prismaMocks, txMocks, detectShopeeAccountRoasDropMock } = vi.hoisted(
       produto: { findMany: vi.fn() },
       productInventory: { findMany: vi.fn() },
       connectorAccount: { findMany: vi.fn() },
+      ecommerceOrderItem: { groupBy: vi.fn() },
     },
     txMocks: {
       $executeRaw: vi.fn(),
@@ -58,6 +59,7 @@ beforeEach(() => {
   txMocks.notification.findFirst.mockResolvedValue(null);
   txMocks.notification.create.mockResolvedValue({});
   detectShopeeAccountRoasDropMock.mockResolvedValue([]);
+  prismaMocks.ecommerceOrderItem.groupBy.mockResolvedValue([]);
 });
 
 describe("detectRoasDrops", () => {
@@ -182,6 +184,71 @@ describe("detectLowStock", () => {
     const drafts = await detectLowStock("ws-1");
 
     expect(drafts).toHaveLength(0);
+  });
+
+  it("inclui o runway em dias quando ha vendas na janela (STCK-02)", async () => {
+    // Âncora da spec: estoque 4, 2 vendas/dia -> ~2 dias.
+    prismaMocks.produto.findMany.mockResolvedValue([
+      {
+        id: "prod-1",
+        nomeOriginal: "Vestido Floral",
+        quantidade: 50,
+        mlItemId: null,
+        shopeeItemId: "SPX9",
+      },
+    ]);
+    prismaMocks.productInventory.findMany.mockResolvedValue([
+      {
+        externalProductId: "SPX9",
+        quantity: 4,
+        sku: "SKU-A",
+        syncedAt: new Date(),
+      },
+    ]);
+    prismaMocks.ecommerceOrderItem.groupBy.mockResolvedValue([
+      { sku: "SKU-A", _sum: { quantity: 28 } },
+    ]);
+
+    const drafts = await detectLowStock("ws-1");
+
+    expect(drafts).toHaveLength(1);
+    expect(drafts[0].body).toContain("cerca de 2 dias");
+    expect(drafts[0].metadata).toMatchObject({
+      stock: 4,
+      runwayDays: 2,
+    });
+    expect(prismaMocks.ecommerceOrderItem.groupBy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ workspaceId: "ws-1" }),
+      }),
+    );
+  });
+
+  it("omite o runway sem vendas e mantem o alerta (STCK-04)", async () => {
+    prismaMocks.produto.findMany.mockResolvedValue([
+      {
+        id: "prod-1",
+        nomeOriginal: "Vestido Floral",
+        quantidade: 50,
+        mlItemId: null,
+        shopeeItemId: "SPX9",
+      },
+    ]);
+    prismaMocks.productInventory.findMany.mockResolvedValue([
+      {
+        externalProductId: "SPX9",
+        quantity: 3,
+        sku: "SKU-A",
+        syncedAt: new Date(),
+      },
+    ]);
+    prismaMocks.ecommerceOrderItem.groupBy.mockResolvedValue([]);
+
+    const drafts = await detectLowStock("ws-1");
+
+    expect(drafts).toHaveLength(1);
+    expect(drafts[0].body).not.toContain("Estimativa");
+    expect("runwayDays" in (drafts[0].metadata as object)).toBe(false);
   });
 });
 

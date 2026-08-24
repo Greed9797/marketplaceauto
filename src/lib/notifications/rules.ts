@@ -1,6 +1,11 @@
 import { ConnectorProvider, ConnectorStatus, type Prisma } from "@prisma/client";
 
 import { prisma } from "@/lib/db/prisma";
+import {
+  RUNWAY_WINDOW_DAYS,
+  averageUnitsPerDay,
+  computeRunwayDays,
+} from "@/lib/notifications/runway";
 import { detectShopeeAccountRoasDrop } from "@/lib/notifications/shopee-account-rule";
 
 export type NotificationSeverity = "info" | "warning" | "critical";
@@ -261,16 +266,62 @@ export async function detectLowStock(
 
   const inventoryRows = await prisma.productInventory.findMany({
     where: { workspaceId, externalProductId: { in: externalIds } },
-    select: { externalProductId: true, quantity: true, syncedAt: true },
+    select: {
+      externalProductId: true,
+      quantity: true,
+      syncedAt: true,
+      sku: true,
+    },
     orderBy: { syncedAt: "desc" },
   });
 
   const stockByExternalId = new Map<string, number | null>();
+  const skuByExternalId = new Map<string, string | null>();
   for (const row of inventoryRows) {
     if (!stockByExternalId.has(row.externalProductId)) {
       stockByExternalId.set(row.externalProductId, row.quantity);
+      skuByExternalId.set(row.externalProductId, row.sku ?? null);
     }
   }
+
+  // Runway (STCK-02): produto -> externalId -> SKU do inventário ->
+  // unidades vendidas em pedidos na janela. Sem SKU ou sem vendas, o alerta
+  // segue sem estimativa (STCK-04).
+  const candidateSkus = [
+    ...new Set(
+      inventoryRows
+        .map((row) => row.sku)
+        .filter((sku): sku is string => Boolean(sku)),
+    ),
+  ];
+  const skuQuantityRows = candidateSkus.length
+    ? await prisma.ecommerceOrderItem.groupBy({
+        by: ["sku"],
+        where: {
+          workspaceId,
+          sku: { in: candidateSkus },
+          placedAt: { gte: daysAgo(RUNWAY_WINDOW_DAYS) },
+        },
+        _sum: { quantity: true },
+      })
+    : [];
+  const soldBySku = new Map(
+    skuQuantityRows.map((row) => [
+      row.sku,
+      Number(row._sum.quantity ?? 0),
+    ]),
+  );
+
+  const totalSoldFor = (externalIdsOfProduto: Array<string | null>): number => {
+    const skus = new Set(
+      externalIdsOfProduto
+        .map((id) => (id ? skuByExternalId.get(id) : null))
+        .filter((sku): sku is string => Boolean(sku)),
+    );
+    let total = 0;
+    for (const sku of skus) total += soldBySku.get(sku) ?? 0;
+    return total;
+  };
 
   const drafts: NotificationDraft[] = [];
 
@@ -295,16 +346,26 @@ export async function detectLowStock(
       produto.shopeeItemId ? "Shopee" : null,
     ].filter(Boolean);
 
+    const unitsPerDay = averageUnitsPerDay(
+      totalSoldFor([produto.mlItemId, produto.shopeeItemId]),
+    );
+    const runwayDays = computeRunwayDays(effectiveStock, unitsPerDay);
+    const runwaySentence =
+      runwayDays === null
+        ? ""
+        : ` Estimativa: cerca de ${runwayDays} ${runwayDays === 1 ? "dia" : "dias"} de estoque no ritmo atual de vendas.`;
+
     drafts.push({
       type: "low_stock",
       severity,
       title: `Estoque baixo: ${produto.nomeOriginal}`,
-      body: `Restam ${effectiveStock} unidade(s) e o anúncio está ativo em ${platforms.join(" e ")}. Reprova estoque ou pause o anúncio para não matar a campanha.`,
+      body: `Restam ${effectiveStock} unidade(s) e o anúncio está ativo em ${platforms.join(" e ")}.${runwaySentence} Reprova estoque ou pause o anúncio para não matar a campanha.`,
       entityType: "produto",
       entityId: produto.id,
       metadata: {
         stock: effectiveStock,
         platforms,
+        ...(runwayDays !== null ? { runwayDays } : {}),
       },
     });
   }
