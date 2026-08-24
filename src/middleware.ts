@@ -29,6 +29,8 @@ const rateLimitedRoutes = [
   "/api/ml",
   "/api/upload",
   "/api/ai",
+  "/api/workspace",
+  "/api/observability",
 ];
 
 function matchesRoute(pathname: string, route: string) {

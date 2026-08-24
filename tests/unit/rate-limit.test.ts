@@ -64,6 +64,54 @@ describe("production rate limit helpers", () => {
     ).toBeNull();
   });
 
+  it("classifies authenticated app API routes", () => {
+    expect(
+      classifyRateLimitTarget({ pathname: "/api/ai/gerar-copy", method: "POST" }),
+    ).toMatchObject({ keyPrefix: "ai", limit: 20 });
+    expect(
+      classifyRateLimitTarget({ pathname: "/api/upload", method: "POST" }),
+    ).toMatchObject({ keyPrefix: "upload", limit: 30 });
+    expect(
+      classifyRateLimitTarget({ pathname: "/api/clientes", method: "GET" }),
+    ).toMatchObject({ keyPrefix: "app", limit: 120 });
+    expect(
+      classifyRateLimitTarget({
+        pathname: "/api/produtos/clx123",
+        method: "PATCH",
+      }),
+    ).toMatchObject({ keyPrefix: "app", limit: 120 });
+    expect(
+      classifyRateLimitTarget({
+        pathname: "/api/publicacoes/clx123/retry",
+        method: "POST",
+      }),
+    ).toMatchObject({ keyPrefix: "app", limit: 120 });
+    expect(
+      classifyRateLimitTarget({
+        pathname: "/api/workspace/sync",
+        method: "POST",
+      }),
+    ).toMatchObject({ keyPrefix: "app", limit: 120 });
+    expect(
+      classifyRateLimitTarget({
+        pathname: "/api/observability/client-error",
+        method: "POST",
+      }),
+    ).toMatchObject({ keyPrefix: "observability", limit: 30 });
+  });
+
+  it("leaves infra endpoints with their own auth out of the limiter", () => {
+    expect(
+      classifyRateLimitTarget({ pathname: "/api/health", method: "GET" }),
+    ).toBeNull();
+    expect(
+      classifyRateLimitTarget({ pathname: "/api/cron/workspace-sync", method: "GET" }),
+    ).toBeNull();
+    expect(
+      classifyRateLimitTarget({ pathname: "/api/inngest", method: "POST" }),
+    ).toBeNull();
+  });
+
   it("skips NextAuth GET reads but still limits auth mutations", () => {
     // Hot path — must NOT touch Upstash (was causing 504 hangs on a dead limiter).
     expect(

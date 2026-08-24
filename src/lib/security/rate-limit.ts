@@ -7,7 +7,14 @@ import { NextResponse, type NextRequest } from "next/server";
 type EnvLike = Partial<NodeJS.ProcessEnv>;
 
 export type RateLimitTarget = {
-  keyPrefix: "auth" | "connectors" | "webhooks" | "observability";
+  keyPrefix:
+    | "auth"
+    | "connectors"
+    | "webhooks"
+    | "observability"
+    | "ai"
+    | "upload"
+    | "app";
   limit: number;
   window: `${number} ${"s" | "m" | "h"}`;
 };
@@ -53,6 +60,25 @@ export function classifyRateLimitTarget(input: {
     // Client-error ingest: bound per client so a single browser/script can't
     // flood the audit log. The route also requires an authenticated session.
     return { keyPrefix: "observability", limit: 30, window: "1 m" };
+  }
+
+  if (input.pathname.startsWith("/api/ai")) {
+    // AI generation proxies paid external APIs — the tightest app budget.
+    return { keyPrefix: "ai", limit: 20, window: "1 m" };
+  }
+
+  if (input.pathname.startsWith("/api/upload")) {
+    return { keyPrefix: "upload", limit: 30, window: "1 m" };
+  }
+
+  if (
+    ["/api/clientes", "/api/produtos", "/api/publicacoes", "/api/workspace"].some(
+      (route) => input.pathname.startsWith(route),
+    )
+  ) {
+    // Authenticated CRUD/sync usage — generous ceiling, still stops runaway
+    // clients and accidental sync loops from hammering the database.
+    return { keyPrefix: "app", limit: 120, window: "1 m" };
   }
 
   return null;
