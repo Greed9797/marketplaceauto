@@ -88,6 +88,7 @@ export function classifyRateLimitTarget(input: {
       "/api/clientes",
       "/api/produtos",
       "/api/publicacoes",
+      "/api/kits",
       "/api/workspace",
       "/api/ml",
       "/api/shopee",

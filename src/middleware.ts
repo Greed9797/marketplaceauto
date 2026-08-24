@@ -26,6 +26,7 @@ const rateLimitedRoutes = [
   "/api/webhooks",
   "/api/produtos",
   "/api/publicacoes",
+  "/api/kits",
   "/api/shopee",
   "/api/ml",
   "/api/upload",

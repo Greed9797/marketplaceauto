@@ -146,6 +146,8 @@ T10 → T11
 
 ### T4: Rota de classificação em lote
 
+**Status**: Complete
+
 **What**: Criar `POST /api/kits/classify` restrito a quem opera o workspace, processando ≤50 produtos pendentes por chamada e retornando contadores (processados/revisão/falhas).
 **Where**: `src/app/api/kits/classify/route.ts`
 **Depends on**: T3
@@ -154,10 +156,10 @@ T10 → T11
 
 **Done when**:
 
-- [ ] Sem sessão → redirect/401; sem permissão → 403
-- [ ] Rate limit herdado do middleware app-tier
-- [ ] Route test cobre happy/edge/erro (padrão client-error-route)
-- [ ] Gate check passes: Full
+- [x] Sem sessão → redirect/401; sem permissão → 403
+- [x] Rate limit herdado do middleware app-tier
+- [x] Route test cobre happy/edge/erro (padrão client-error-route)
+- [x] Gate check passes: Full
 
 **Tests**: integration
 **Gate**: full

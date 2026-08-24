@@ -119,6 +119,12 @@ describe("production rate limit helpers", () => {
     ).toMatchObject({ keyPrefix: "app", limit: 120 });
     expect(
       classifyRateLimitTarget({
+        pathname: "/api/kits/classify",
+        method: "POST",
+      }),
+    ).toMatchObject({ keyPrefix: "app", limit: 120 });
+    expect(
+      classifyRateLimitTarget({
         pathname: "/api/observability/client-error",
         method: "POST",
       }),
