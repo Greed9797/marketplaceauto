@@ -34,6 +34,11 @@ const providerLogoAssets: Partial<
     src: "/connector-logos/google-ads.jpg",
     width: 512,
   },
+  GOOGLE_DRIVE: {
+    height: 78,
+    src: "/connector-logos/google-drive.svg",
+    width: 87,
+  },
   GA4: {
     height: 512,
     src: "/connector-logos/google-analytics.png",

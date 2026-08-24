@@ -27,6 +27,7 @@ import {
   MARKETPLACE_FIRST,
 } from "@/lib/connectors/marketplace-first";
 import { getGlobalMercadoLivreConfig } from "@/lib/connectors/mercado-livre/global-config";
+import { getGlobalGoogleDriveConfig } from "@/lib/connectors/google-drive/oauth";
 import { getGlobalShopeeConfig } from "@/lib/connectors/shopee/global-config";
 import { getMlEnvConfig } from "@/lib/publisher/ml-env-config";
 import { listPublicProviderConfigs } from "@/lib/connectors/provider-config";
@@ -124,6 +125,14 @@ function connectorMessage(
     };
   }
 
+  if (connected === "google_drive") {
+    return {
+      tone: "success" as const,
+      title: "Google Drive conectado.",
+      body: "As imagens dos produtos agora são salvas na pasta W3 Marketplace do seu Drive.",
+    };
+  }
+
   if (
     connected &&
     ["iset", "tray", "wbuy", "magazord", "google_sheets"].includes(connected)
@@ -168,6 +177,8 @@ function connectorMessage(
       "A assinatura retornada pela Shopify nao passou na validacao HMAC.",
     "invalid-shop": "Informe uma loja Shopify valida, como loja.myshopify.com.",
     "provider-denied": "A autorizacao foi cancelada no provedor.",
+    "bootstrap-failed":
+      "Nao conseguimos preparar a pasta W3 Marketplace no seu Drive. Confira o consentimento OAuth (escopo drive.file) e tente de novo.",
     "missing-shop": "Informe o dominio da loja Shopify antes de conectar.",
     "shopify-api":
       "Nao conseguimos concluir a conexao com a Shopify agora. Tente novamente em alguns minutos.",
@@ -274,6 +285,9 @@ export default async function ConnectorsPage({
   // o connect flow usa esse fallback quando o workspace não tem ProviderConfig,
   // então o card deve oferecer "Conectar" direto em vez de forçar o formulário.
   const appOrigin = await resolveAppOrigin();
+  if (getGlobalGoogleDriveConfig(appOrigin)) {
+    providerConfigs.add(ConnectorProvider.GOOGLE_DRIVE);
+  }
   const hasMlConnectorConfig =
     providerConfigs.has(ConnectorProvider.MERCADO_LIVRE) ||
     Boolean(getGlobalMercadoLivreConfig(appOrigin));
@@ -305,6 +319,8 @@ export default async function ConnectorsPage({
   const mercadoLivreAccounts =
     connectorCounts.get(ConnectorProvider.MERCADO_LIVRE) ?? 0;
   const shopeeAccounts = connectorCounts.get(ConnectorProvider.SHOPEE) ?? 0;
+  const driveAccounts =
+    connectorCounts.get(ConnectorProvider.GOOGLE_DRIVE) ?? 0;
 
   function missingConfigAction(provider: ConnectorProvider) {
     if (canConfigureProviders) {
@@ -433,6 +449,29 @@ export default async function ConnectorsPage({
           >
             <Cable size={16} aria-hidden="true" />
             Conectar Analytics
+          </a>
+        </Button>,
+      ),
+    },
+    {
+      provider: ConnectorProvider.GOOGLE_DRIVE,
+      name: "Google Drive",
+      description:
+        "Conecte o seu Drive para salvar as imagens dos produtos na pasta W3 Marketplace — organizadas por cliente e fora do Supabase.",
+      statusLabel: statusLabel(
+        ConnectorProvider.GOOGLE_DRIVE,
+        driveAccounts,
+        "Drive",
+      ),
+      statusTone: statusTone(ConnectorProvider.GOOGLE_DRIVE, driveAccounts),
+      action: connectorAction(
+        ConnectorProvider.GOOGLE_DRIVE,
+        <Button asChild size="sm">
+          <a
+            href={`/api/connectors/google-drive/connect?ws=${context.currentWorkspace.id}`}
+          >
+            <Cable size={16} aria-hidden="true" />
+            Conectar Drive
           </a>
         </Button>,
       ),
