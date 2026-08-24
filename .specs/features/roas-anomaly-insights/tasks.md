@@ -203,10 +203,10 @@ T10
 
 **Done when**:
 
-- [ ] Janela > histórico retorna dados disponíveis + partialHistory=true
-- [ ] Filtro por fonte isola Shopee Ads / ML Ads
-- [ ] Workspace vazio → série vazia sem erro
-- [ ] Gate check passes: `npx vitest run`
+- [x] Janela > histórico retorna dados disponíveis + partialHistory=true
+- [x] Filtro por fonte isola Shopee Ads / ML Ads
+- [x] Workspace vazio → série vazia sem erro
+- [x] Gate check passes: `npx vitest run`
 
 **Tests**: unit
 **Gate**: quick
