@@ -104,6 +104,22 @@ model Workspace {
   clientes                 Cliente[]
   aiConfig                 WorkspaceAiConfig?
   notifications            Notification[]
+  notificationChannel      NotificationChannel?
+}
+
+/// Canal externo de notificação por workspace (feature roas-anomaly-insights).
+/// Máx. 1 linha por workspace: um webhook genérico (compatível Discord/Slack)
+/// e/ou um destinatário de e-mail via Resend. A entrega herda o dedup de 24h
+/// das notificações — só sai o que foi recém-criado.
+model NotificationChannel {
+  id          String    @id @default(cuid())
+  workspaceId String    @unique
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  webhookUrl  String?
+  notifyEmail String?
+  enabled     Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 }
 
 model Notification {

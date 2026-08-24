@@ -243,9 +243,9 @@ T10
 
 **Done when**:
 
-- [ ] `npx prisma validate` OK e client gerado
-- [ ] Migration SQL revisada (sem destructive)
-- [ ] Gate check passes: Full + `npx next build`
+- [x] `npx prisma validate` OK e client gerado
+- [x] Migration SQL revisada (sem destructive)
+- [x] Gate check passes: Full + `npx next build`
 
 **Tests**: none
 **Gate**: build
