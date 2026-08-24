@@ -133,7 +133,7 @@ um e verificar relatório parcial.
 
 | Requirement ID | Story | Phase | Status |
 | -------------- | ----- | ----- | ------ |
-| KIT-01 | P1: Derivação IA de atributos | T1 | In Progress |
+| KIT-01 | P1: Derivação IA de atributos | T1-T2 | In Progress |
 | KIT-02 | P1: Limiar de confiança 0.7 | - | Pending |
 | KIT-03 | P1: Falha de IA não bloqueia lote | - | Pending |
 | KIT-04 | P1: Override manual permanente | T1 | In Progress |

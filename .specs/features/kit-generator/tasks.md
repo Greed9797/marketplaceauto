@@ -99,6 +99,8 @@ T10 → T11
 
 ### T2: Cliente Gemini compartilhado
 
+**Status**: Complete
+
 **What**: Extrair chamada REST generateContent + strip de fences para `src/lib/ai/gemini.ts` com `generateJson<T>`; `ai-copy.ts` passa a consumi-lo.
 **Where**: `src/lib/ai/gemini.ts`
 **Depends on**: T1
@@ -112,9 +114,9 @@ T10 → T11
 
 **Done when**:
 
-- [ ] Testes existentes de ai-copy continuam verdes (nenhum comportamento mudado)
-- [ ] Teste novo: resposta com fences/ruído é normalizada
-- [ ] Gate check passes: `npx vitest run`
+- [x] Testes existentes de ai-copy continuam verdes (nenhum comportamento mudado)
+- [x] Teste novo: resposta com fences/ruído é normalizada
+- [x] Gate check passes: `npx vitest run`
 
 **Tests**: unit
 **Gate**: quick

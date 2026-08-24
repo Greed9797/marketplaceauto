@@ -1,12 +1,9 @@
 import type { Cliente, Produto } from "@prisma/client";
-
-/**
- * Gemini generateContent REST endpoint. Called directly over `fetch` (no SDK
- * dependency) to keep the bundle lean and avoid adding a package for a single
- * call. Model mirrors the "auto" repo (`gemini-1.5-flash`).
- */
-const GEMINI_MODEL = "gemini-1.5-flash";
-const GEMINI_ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
+import {
+  GeminiEmptyResponseError,
+  GeminiHttpError,
+  generateJson,
+} from "@/lib/ai/gemini";
 
 export type GeneratedCopy = {
   tituloMl: string;
@@ -73,33 +70,8 @@ Retorne APENAS JSON válido, sem markdown, sem explicações:
 {"titulo_ml":"...","titulo_shopee":"...","descricao":"...","categoria_ml_sugerida":"...","categoria_shopee_id":0,"atributos":{}}`;
 }
 
-/** Extracts the text part from a Gemini generateContent response. */
-function extractText(payload: unknown): string {
-  if (!isRecord(payload)) return "";
-  const candidates = payload.candidates;
-  if (!Array.isArray(candidates)) return "";
-  const first = candidates[0];
-  if (!isRecord(first)) return "";
-  const content = first.content;
-  if (!isRecord(content)) return "";
-  const parts = content.parts;
-  if (!Array.isArray(parts)) return "";
-
-  return parts
-    .map((part) =>
-      isRecord(part) && typeof part.text === "string" ? part.text : "",
-    )
-    .join("");
-}
-
-/** Strips markdown fences and coerces the model JSON into GeneratedCopy. */
-function parseCopy(text: string): GeneratedCopy {
-  const cleaned = text
-    .replace(/^```json\s*/i, "")
-    .replace(/```$/i, "")
-    .trim();
-
-  const parsed: unknown = JSON.parse(cleaned);
+/** Coerces the model JSON into the public copy contract. */
+function parseCopy(parsed: unknown): GeneratedCopy {
   const record = isRecord(parsed) ? parsed : {};
 
   const rawAtributos = isRecord(record.atributos) ? record.atributos : {};
@@ -135,13 +107,6 @@ export async function gerarCopy(input: {
   imagemBase64?: string | null;
   imagemMimeType?: string | null;
 }): Promise<GeneratedCopy> {
-  const apiKey = input.apiKey?.trim() || process.env.GEMINI_API_KEY;
-  if (!apiKey) {
-    throw new Error(
-      "Chave de IA não configurada — cadastre sua chave Gemini em Configurações.",
-    );
-  }
-
   const prompt = buildPrompt({
     nomeProduto: input.produto.nomeOriginal,
     nicho: input.cliente.nicho ?? "",
@@ -150,39 +115,21 @@ export async function gerarCopy(input: {
     exemplosDescricoes: parseExemplos(input.cliente.exemplosDescricoes),
   });
 
-  // Multimodal: quando há imagem, envia foto + texto (Gemini Flash é
-  // multimodal) para enriquecer título/descrição/atributos com o que aparece
-  // na foto. Sem imagem, é texto puro como antes.
-  const parts: Array<Record<string, unknown>> = [{ text: prompt }];
-  if (input.imagemBase64) {
-    parts.push({
-      inlineData: {
-        mimeType: input.imagemMimeType || "image/jpeg",
-        data: input.imagemBase64,
-      },
+  try {
+    const { data } = await generateJson<unknown>({
+      apiKey: input.apiKey,
+      prompt,
+      imageBase64: input.imagemBase64,
+      imageMimeType: input.imagemMimeType,
     });
+    return parseCopy(data);
+  } catch (error) {
+    if (error instanceof GeminiHttpError) {
+      throw new Error(`Falha ao gerar copy com Gemini (HTTP ${error.status}).`);
+    }
+    if (error instanceof GeminiEmptyResponseError) {
+      throw new Error("Gemini retornou resposta vazia.");
+    }
+    throw error;
   }
-
-  const response = await fetch(`${GEMINI_ENDPOINT}?key=${apiKey}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      contents: [{ parts }],
-    }),
-    signal: AbortSignal.timeout(30_000),
-  });
-
-  if (!response.ok) {
-    throw new Error(
-      `Falha ao gerar copy com Gemini (HTTP ${response.status}).`,
-    );
-  }
-
-  const payload: unknown = await response.json();
-  const text = extractText(payload);
-  if (!text) {
-    throw new Error("Gemini retornou resposta vazia.");
-  }
-
-  return parseCopy(text);
 }
