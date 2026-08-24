@@ -1,5 +1,13 @@
 import { NextRequest } from "next/server";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+vi.mock("@/lib/auth/auth", () => ({
+  auth: vi.fn(async () => ({ user: { id: "test-user" } })),
+}));
+
+vi.mock("@/lib/audit/log", () => ({
+  logAudit: vi.fn(async () => undefined),
+}));
 
 import { POST } from "@/app/api/observability/client-error/route";
 

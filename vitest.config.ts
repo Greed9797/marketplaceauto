@@ -18,6 +18,11 @@ export default defineConfig({
     exclude: ["node_modules/**", ".next/**", "tests/e2e/**"],
     globals: true,
     setupFiles: ["./tests/setup.ts"],
+    server: {
+      deps: {
+        inline: ["next-auth", "@auth/core"],
+      },
+    },
     coverage: {
       provider: "v8",
       reporter: ["text", "lcov"],
